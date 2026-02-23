@@ -1,5 +1,5 @@
 === Vector Expressions ===
-Contributors: vectorwp
+Contributors: Vector Arrow
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.1
@@ -64,7 +64,7 @@ For a full reference of the Expression Language, visit the plugin website or the
 
 = Does this work with any block? =
 
-Yes! The Vector Logic panel is injected into all registered Gutenberg blocks. Note that expression tokens inside code or raw-content blocks (like core/code or core/html) are not processed to prevent accidental evaluation.
+Yes! The Vector Logic panel is injected into all registered Gutenberg blocks, and can be added to any block content. Note that expression tokens inside code or raw-content blocks (like core/code or core/html) are not processed to prevent accidental evaluation.
 
 = Is it evaluated server-side or in JavaScript? =
 
