@@ -1,12 +1,12 @@
 === Vector Expressions ===
-Contributors: Vector Arrow
+Contributors: vectorarrow
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.1
 Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
-Tags: block editor, gutenberg, logic, dynamic content, expressions, vector
+Tags: block editor, gutenberg, logic, dynamic content, expressions
 
 A logic engine for the Gutenberg block editor. Embed dynamic expressions directly in block content to personalize output and control block visibility.
 
@@ -18,13 +18,13 @@ Vector Expressions uses a **mustache-style template syntax** evaluated server-si
 
 ### Syntax
 
-* `{{ expression }}` - Evaluate and HTML-escape the result
-* `{{{ expression }}}` - Evaluate **without** escaping (raw output)
-* `{{-- comment --}}` - Strip the block entirely — no output
+* `{{ expression }}` – Evaluate and HTML-escape the result
+* `{{{ expression }}}` – Evaluate **without** escaping (raw output)
+* `{{– comment –}}` – Strip the block entirely — no output
 
 Expressions support JS-style inline string interpolation:
-* `"Hello {user.name}"` - Evaluates to "Hello John"
-* `"CSS: \{display: none}"` - Evaluates to "CSS: {display: none}" (use `\{` to escape raw brackets)
+* `"Hello {user.name}"` – Evaluates to "Hello John"
+* `"CSS: \{display: none}"` – Evaluates to "CSS: {display: none}" (use `\{` to escape raw brackets)
 
 Security Note: Data pulled from the database is printed literally. If you saved an expression string inside a custom field, you must explicitly pipe it through the render engine to execute it:
 * `{{ post.meta.dynamic_field | render }}`
@@ -33,9 +33,9 @@ Security Note: Data pulled from the database is printed literally. If you saved 
 
 Access WordPress data using dot-notation from these root variables:
 
-* `post` - Current WP_Post
-* `user` - Current WP_User (logged-in user)
-* `site` - Object with name, url, description, language
+* `post` – Current WP_Post
+* `user` – Current WP_User (logged-in user)
+* `site` – Object with name, url, description, language
 
 ### Property Aliases
 
