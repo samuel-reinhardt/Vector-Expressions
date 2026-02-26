@@ -167,7 +167,12 @@ const useTokenEventListeners = ( contentRef, refs ) => {
 					if ( inside || ! range.collapsed ) {
 						evt.preventDefault();
 						evt.stopPropagation();
-						refs.activeMarkRef.current = refs.anchorRef.current;
+						const markEl = inside || refs.anchorRef.current;
+						refs.activeMarkRef.current = markEl;
+						// Update both the mutable ref (synchronous, read by the
+						// setPopoverOpenRef wrapper instantly) and React state.
+						refs.anchorRef.current = markEl;
+						refs.setAnchorRef.current?.( markEl );
 						refs.setPopoverOpenRef.current( true );
 					}
 					return;
@@ -209,6 +214,10 @@ const useTokenEventListeners = ( contentRef, refs ) => {
 			iframeWin.getSelection().addRange( range );
 
 			refs.activeMarkRef.current = evt.target;
+			// Update the mutable ref synchronously so the setPopoverOpenRef
+			// wrapper sees the anchor before React batches the state update.
+			refs.anchorRef.current = evt.target;
+			refs.setAnchorRef.current?.( evt.target );
 			refs.setPopoverOpenRef.current( true );
 		};
 
@@ -522,10 +531,41 @@ const TokenPopover = ( { anchor, getFallbackAnchor, editExpr, setEdit, onUpdate,
  *   contentRef:       React.RefObject,
  * }} props
  */
+/**
+ * Returns a DOMRect-like object whose coordinates are relative to the
+ * main-window viewport, correcting for the editor iframe's own position.
+ *
+ * @returns {DOMRect|null}
+ */
+const getViewportCorrectedRect = () => {
+	const iframe = document.querySelector( 'iframe[name="editor-canvas"]' );
+	const win    = iframe ? iframe.contentWindow : window;
+	const sel    = win?.getSelection();
+	if ( ! sel?.rangeCount ) return null;
+
+	const selRect    = sel.getRangeAt( 0 ).getBoundingClientRect();
+	const iframeRect = iframe ? iframe.getBoundingClientRect() : { top: 0, left: 0 };
+
+	const top    = selRect.top    + iframeRect.top;
+	const left   = selRect.left   + iframeRect.left;
+	const bottom = selRect.bottom + iframeRect.top;
+	const right  = selRect.right  + iframeRect.left;
+
+	return {
+		top, left, bottom, right,
+		width:  selRect.width,
+		height: selRect.height,
+		x: left,
+		y: top,
+		toJSON() { return this; },
+	};
+};
+
 const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentRef } ) => {
-	const [ editExpr,    setEdit ]        = useState( '' );
-	const [ popoverOpen, setPopoverOpen ] = useState( false );
-	const [ livePreview, setLivePreview ] = useState( null );
+	const [ editExpr,       setEdit ]           = useState( '' );
+	const [ popoverOpen,    setPopoverOpen ]     = useState( false );
+	const [ livePreview,    setLivePreview ]     = useState( null );
+	const [ frozenInsertRect, setFrozenInsertRect ] = useState( null );
 	const inputRef = useRef( null );
 
 	const isActiveRef       = useRef( false );
@@ -536,8 +576,18 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 	const setPopoverOpenRef = useRef( null );
 
 	// Keep refs current synchronously on every render.
-	setPopoverOpenRef.current = setPopoverOpen;
-	popoverOpenRef.current    = popoverOpen;
+	// Wrap setPopoverOpen so opening the popover without a DOM anchor (new
+	// insertion flow) immediately snapshots a viewport-corrected rect. This
+	// prevents the Popover from jumping after it renders into the portal.
+	setPopoverOpenRef.current = ( open ) => {
+		if ( open && ! anchorRef.current ) {
+			setFrozenInsertRect( getViewportCorrectedRect() );
+		} else if ( ! open ) {
+			setFrozenInsertRect( null );
+		}
+		setPopoverOpen( open );
+	};
+	popoverOpenRef.current = popoverOpen;
 
 	const [ anchor, setAnchor ] = useState( null );
 
@@ -559,11 +609,22 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 						pointerNode = pointerNode.parentNode;
 					}
 
-					const activeNode = pointerNode?.closest( '.ve-expr-token' ) || null;
+					let activeNode = pointerNode?.closest( '.ve-expr-token' ) || null;
+
+					// If the selection is just outside the token (e.g. from our click
+					// handler relocating it) but the popover is open for a valid token,
+					// keep the current anchor so the popover doesn't crash or unmount.
+					if ( ! activeNode && popoverOpenRef.current && activeMarkRef.current?.isConnected ) {
+						activeNode = activeMarkRef.current;
+					}
 
 					setAnchor( activeNode );
 				} else {
-					setAnchor( null );
+					if ( popoverOpenRef.current && activeMarkRef.current?.isConnected ) {
+						setAnchor( activeMarkRef.current );
+					} else {
+						setAnchor( null );
+					}
 				}
 			}, 10 );
 
@@ -578,9 +639,12 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 	useLayoutEffect( () => { anchorRef.current   = anchor;   }, [ anchor ]   );
 
 	useActiveTokenState( isActive, contentRef );
+	const setAnchorRef = useRef( null );
+	setAnchorRef.current = setAnchor;
+
 	useTokenEventListeners( contentRef, {
 		isActiveRef, popoverOpenRef, anchorRef,
-		activeMarkRef, dismissPopoverRef, setPopoverOpenRef,
+		activeMarkRef, dismissPopoverRef, setPopoverOpenRef, setAnchorRef,
 	} );
 
 	useEffect( () => {
@@ -665,6 +729,7 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 
 	const dismissPopover = useCallback( () => {
 		setPopoverOpen( false );
+		setFrozenInsertRect( null );
 		const el   = contentRef?.current;
 		const mark = activeMarkRef.current;
 		if ( el && mark ) {
@@ -683,17 +748,20 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 
 	if ( ! popoverOpen ) return null;
 
-	const getFallbackAnchor = () => {
-		const iframe = document.querySelector( 'iframe[name="editor-canvas"]' );
-		const win = iframe ? iframe.contentWindow : window;
-		const sel = win.getSelection();
-		return sel?.rangeCount ? sel.getRangeAt( 0 ).getBoundingClientRect() : null;
-	};
+	// Build the effective anchor:
+	// - For editing an existing token: the mark DOM node (most reliable).
+	// - For inserting a new token: a frozen viewport-corrected rect captured at
+	//   open time, so the popover never repositions after initial paint.
+	const effectiveAnchor = anchor
+		? anchor
+		: frozenInsertRect
+			? { getBoundingClientRect: () => frozenInsertRect }
+			: null;
 
 	return (
 		<TokenPopover
-			anchor={ anchor }
-			getFallbackAnchor={ getFallbackAnchor }
+			anchor={ effectiveAnchor }
+			getFallbackAnchor={ () => frozenInsertRect }
 			editExpr={ editExpr }
 			setEdit={ setEdit }
 			previewObj={ livePreview }

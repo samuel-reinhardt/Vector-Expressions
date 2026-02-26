@@ -530,7 +530,7 @@
       if (!el2) return;
       const doc = el2.ownerDocument || document;
       const onKeyDown = (evt) => {
-        var _a2, _b2;
+        var _a2, _b2, _c2, _d2;
         const { key } = evt;
         if (key === "Escape" && refs.popoverOpenRef.current) {
           evt.preventDefault();
@@ -570,7 +570,10 @@
             if (inside || !range.collapsed) {
               evt.preventDefault();
               evt.stopPropagation();
-              refs.activeMarkRef.current = refs.anchorRef.current;
+              const markEl = inside || refs.anchorRef.current;
+              refs.activeMarkRef.current = markEl;
+              refs.anchorRef.current = markEl;
+              (_d2 = (_c2 = refs.setAnchorRef).current) == null ? void 0 : _d2.call(_c2, markEl);
               refs.setPopoverOpenRef.current(true);
             }
             return;
@@ -585,6 +588,7 @@
         }
       };
       const onClickToken = (evt) => {
+        var _a2, _b2;
         if (!el2.contains(evt.target) || evt.target.tagName !== "MARK" || !evt.target.classList.contains("ve-expr-token")) return;
         const iframeDoc = el2.ownerDocument;
         const iframeWin = iframeDoc.defaultView;
@@ -594,6 +598,8 @@
         iframeWin.getSelection().removeAllRanges();
         iframeWin.getSelection().addRange(range);
         refs.activeMarkRef.current = evt.target;
+        refs.anchorRef.current = evt.target;
+        (_b2 = (_a2 = refs.setAnchorRef).current) == null ? void 0 : _b2.call(_a2, evt.target);
         refs.setPopoverOpenRef.current(true);
       };
       doc.addEventListener("keydown", onKeyDown, true);
@@ -809,10 +815,36 @@
       __("Apply", "vector-expressions")
     )))
   );
+  var getViewportCorrectedRect = () => {
+    const iframe = document.querySelector('iframe[name="editor-canvas"]');
+    const win = iframe ? iframe.contentWindow : window;
+    const sel = win == null ? void 0 : win.getSelection();
+    if (!(sel == null ? void 0 : sel.rangeCount)) return null;
+    const selRect = sel.getRangeAt(0).getBoundingClientRect();
+    const iframeRect = iframe ? iframe.getBoundingClientRect() : { top: 0, left: 0 };
+    const top = selRect.top + iframeRect.top;
+    const left = selRect.left + iframeRect.left;
+    const bottom = selRect.bottom + iframeRect.top;
+    const right = selRect.right + iframeRect.left;
+    return {
+      top,
+      left,
+      bottom,
+      right,
+      width: selRect.width,
+      height: selRect.height,
+      x: left,
+      y: top,
+      toJSON() {
+        return this;
+      }
+    };
+  };
   var ExpressionEdit = ({ isActive, activeAttributes, value, onChange, contentRef }) => {
     const [editExpr, setEdit] = useState("");
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [livePreview, setLivePreview] = useState(null);
+    const [frozenInsertRect, setFrozenInsertRect] = useState(null);
     const inputRef = useRef2(null);
     const isActiveRef = useRef2(false);
     const anchorRef = useRef2(null);
@@ -820,12 +852,20 @@
     const popoverOpenRef = useRef2(false);
     const dismissPopoverRef = useRef2(null);
     const setPopoverOpenRef = useRef2(null);
-    setPopoverOpenRef.current = setPopoverOpen;
+    setPopoverOpenRef.current = (open) => {
+      if (open && !anchorRef.current) {
+        setFrozenInsertRect(getViewportCorrectedRect());
+      } else if (!open) {
+        setFrozenInsertRect(null);
+      }
+      setPopoverOpen(open);
+    };
     popoverOpenRef.current = popoverOpen;
     const [anchor, setAnchor] = useState(null);
     useEffect(() => {
       if (isActive) {
         const timer = setTimeout(() => {
+          var _a2, _b2;
           const iframe = document.querySelector('iframe[name="editor-canvas"]');
           const doc = iframe ? iframe.contentDocument : document;
           const win = iframe ? iframe.contentWindow : window;
@@ -836,10 +876,17 @@
             if (pointerNode.nodeType === 3) {
               pointerNode = pointerNode.parentNode;
             }
-            const activeNode = (pointerNode == null ? void 0 : pointerNode.closest(".ve-expr-token")) || null;
+            let activeNode = (pointerNode == null ? void 0 : pointerNode.closest(".ve-expr-token")) || null;
+            if (!activeNode && popoverOpenRef.current && ((_a2 = activeMarkRef.current) == null ? void 0 : _a2.isConnected)) {
+              activeNode = activeMarkRef.current;
+            }
             setAnchor(activeNode);
           } else {
-            setAnchor(null);
+            if (popoverOpenRef.current && ((_b2 = activeMarkRef.current) == null ? void 0 : _b2.isConnected)) {
+              setAnchor(activeMarkRef.current);
+            } else {
+              setAnchor(null);
+            }
           }
         }, 10);
         return () => clearTimeout(timer);
@@ -854,13 +901,16 @@
       anchorRef.current = anchor;
     }, [anchor]);
     useActiveTokenState(isActive, contentRef);
+    const setAnchorRef = useRef2(null);
+    setAnchorRef.current = setAnchor;
     useTokenEventListeners(contentRef, {
       isActiveRef,
       popoverOpenRef,
       anchorRef,
       activeMarkRef,
       dismissPopoverRef,
-      setPopoverOpenRef
+      setPopoverOpenRef,
+      setAnchorRef
     });
     useEffect(() => {
       var _a2;
@@ -936,6 +986,7 @@
     }, [value, onChange]);
     const dismissPopover = useCallback2(() => {
       setPopoverOpen(false);
+      setFrozenInsertRect(null);
       const el2 = contentRef == null ? void 0 : contentRef.current;
       const mark = activeMarkRef.current;
       if (el2 && mark) {
@@ -951,17 +1002,12 @@
     }, [contentRef]);
     dismissPopoverRef.current = dismissPopover;
     if (!popoverOpen) return null;
-    const getFallbackAnchor = () => {
-      const iframe = document.querySelector('iframe[name="editor-canvas"]');
-      const win = iframe ? iframe.contentWindow : window;
-      const sel = win.getSelection();
-      return (sel == null ? void 0 : sel.rangeCount) ? sel.getRangeAt(0).getBoundingClientRect() : null;
-    };
+    const effectiveAnchor = anchor ? anchor : frozenInsertRect ? { getBoundingClientRect: () => frozenInsertRect } : null;
     return /* @__PURE__ */ wp.element.createElement(
       TokenPopover,
       {
-        anchor,
-        getFallbackAnchor,
+        anchor: effectiveAnchor,
+        getFallbackAnchor: () => frozenInsertRect,
         editExpr,
         setEdit,
         previewObj: livePreview,
