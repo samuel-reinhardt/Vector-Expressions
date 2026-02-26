@@ -16,6 +16,13 @@ Vector Expressions is a logic engine for the Gutenberg block editor. Embed dynam
 
 Vector Expressions uses a **mustache-style template syntax** evaluated server-side on every block render.
 
+### How to Use
+
+Open up the block editor and add a block. Then, open the Vector Logic panel in the block sidebar and add an expression to control visibility or append a CSS class to the block. 
+
+You can also add expressions directly to the block content. Create a paragraph block, and start typing `{{` to see the autocomplete suggestions. Select the one you want to use and then press enter or tab to close the autocomplete. 
+The expression will provide a preview inline to your content. Save the post and view it on the frontend to see the end result.
+
 ### Syntax
 
 * `{{ expression }}` – Evaluate and HTML-escape the result
