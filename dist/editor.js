@@ -411,18 +411,62 @@
   var TOKEN_REGEX = /(<mark\b[^>]*\bclass="ve-expr-token"[^>]*>[\s\S]*?<\/mark>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
   var POPOVER_FOCUS_DELAY = 50;
 
+  // modules/editor/auto-textarea.jsx
+  var {
+    useRef,
+    useCallback,
+    useLayoutEffect
+  } = window.wp.element;
+  var AutoTextarea = ({
+    value,
+    onChange,
+    placeholder = "",
+    className = "ve-class-textarea",
+    id,
+    onKeyDown,
+    inputRef: externalRef
+  }) => {
+    const elRef = useRef(null);
+    const resize = useCallback(() => {
+      const el2 = elRef.current;
+      if (!el2 || !el2.offsetParent) return;
+      el2.style.height = "auto";
+      el2.style.height = el2.scrollHeight + "px";
+    }, []);
+    useLayoutEffect(resize, [value]);
+    const callbackRef = useCallback((el2) => {
+      elRef.current = el2;
+      if (externalRef) externalRef.current = el2;
+      if (el2) resize();
+    }, []);
+    return /* @__PURE__ */ wp.element.createElement(
+      "textarea",
+      {
+        id,
+        ref: callbackRef,
+        className,
+        value,
+        onChange: (e) => onChange(e.target.value),
+        onFocus: resize,
+        onKeyDown,
+        placeholder,
+        rows: 1,
+        spellCheck: false
+      }
+    );
+  };
+
   // modules/editor/expression-format.jsx
   var {
     useState,
     useEffect,
-    useLayoutEffect,
-    useRef,
-    useCallback
+    useLayoutEffect: useLayoutEffect2,
+    useRef: useRef2,
+    useCallback: useCallback2
   } = window.wp.element;
   var {
     Popover,
     Button,
-    TextareaControl,
     TabPanel,
     Icon
   } = window.wp.components;
@@ -702,12 +746,13 @@
       }
     },
     /* @__PURE__ */ wp.element.createElement("div", { className: "ve-expression-builder", style: { padding: "16px", width: "420px", boxSizing: "border-box" } }, /* @__PURE__ */ wp.element.createElement("div", { style: { display: "flex", flexDirection: "column", gap: "8px" } }, /* @__PURE__ */ wp.element.createElement("label", { style: { fontSize: "13px", fontWeight: 600 } }, __("Vector Expression", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
-      TextareaControl,
+      AutoTextarea,
       {
-        className: "ve-expr-input",
-        rows: 1,
+        className: "ve-expr-input ve-class-textarea",
         value: editExpr,
         onChange: (val) => setEdit(val),
+        placeholder: "user.is_logged_in",
+        inputRef,
         onKeyDown: async (e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -768,13 +813,13 @@
     const [editExpr, setEdit] = useState("");
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [livePreview, setLivePreview] = useState(null);
-    const inputRef = useRef(null);
-    const isActiveRef = useRef(false);
-    const anchorRef = useRef(null);
-    const activeMarkRef = useRef(null);
-    const popoverOpenRef = useRef(false);
-    const dismissPopoverRef = useRef(null);
-    const setPopoverOpenRef = useRef(null);
+    const inputRef = useRef2(null);
+    const isActiveRef = useRef2(false);
+    const anchorRef = useRef2(null);
+    const activeMarkRef = useRef2(null);
+    const popoverOpenRef = useRef2(false);
+    const dismissPopoverRef = useRef2(null);
+    const setPopoverOpenRef = useRef2(null);
     setPopoverOpenRef.current = setPopoverOpen;
     popoverOpenRef.current = popoverOpen;
     const [anchor, setAnchor] = useState(null);
@@ -802,10 +847,10 @@
         setAnchor(null);
       }
     }, [isActive, value]);
-    useLayoutEffect(() => {
+    useLayoutEffect2(() => {
       isActiveRef.current = isActive;
     }, [isActive]);
-    useLayoutEffect(() => {
+    useLayoutEffect2(() => {
       anchorRef.current = anchor;
     }, [anchor]);
     useActiveTokenState(isActive, contentRef);
@@ -857,7 +902,7 @@
       }, POPOVER_FOCUS_DELAY);
       return () => clearTimeout(id);
     }, [popoverOpen]);
-    const applyUpdate = useCallback(async () => {
+    const applyUpdate = useCallback2(async () => {
       var _a2, _b2;
       const expr = editExpr.trim();
       if (!expr) return;
@@ -870,7 +915,7 @@
       next.start = next.end;
       onChange(next);
     }, [editExpr, value, onChange]);
-    const applyRemove = useCallback(() => {
+    const applyRemove = useCallback2(() => {
       var _a2;
       const formats = (_a2 = value.formats) != null ? _a2 : [];
       let pivot = value.start;
@@ -889,7 +934,7 @@
       while (rangeEnd < formats.length && hasFormat(rangeEnd)) rangeEnd++;
       onChange(concat(slice(value, 0, rangeStart), slice(value, rangeEnd)));
     }, [value, onChange]);
-    const dismissPopover = useCallback(() => {
+    const dismissPopover = useCallback2(() => {
       setPopoverOpen(false);
       const el2 = contentRef == null ? void 0 : contentRef.current;
       const mark = activeMarkRef.current;
@@ -1089,13 +1134,13 @@
     "svg",
     {
       width: "16",
-      height: "13",
-      viewBox: "0 0 152.4041 123.48927",
+      height: "16",
+      viewBox: "-376 -15 92 126",
       "aria-hidden": "true",
       focusable: "false",
       className: "ve-logo"
     },
-    /* @__PURE__ */ wp.element.createElement("g", { transform: "translate(-21.978578,-1.3773247)", style: { fill: "#5df4a3" } }, /* @__PURE__ */ wp.element.createElement("path", { d: "M 21.978578,1.3773247 H 53.500485 L 77.7926,49.383171 51.476144,60.950841 Z" }), /* @__PURE__ */ wp.element.createElement("path", { d: "M 61.019472,80.331054 83.576434,124.86659 H 113.36319 L 174.38267,1.3773247 H 78.081792 L 90.227848,27.119764 130.7147,26.252194 98.614411,94.501464 86.179163,68.474194 Z" }))
+    /* @__PURE__ */ wp.element.createElement("g", { style: { fill: "#0d6632" } }, /* @__PURE__ */ wp.element.createElement("path", { d: "M -372.38427,54.856239 V 40.319598 q 5.39067,-0.242277 7.93459,-2.119927 2.60448,-1.877649 3.937,-5.875225 1.3931,-3.997576 1.3931,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09024,-4.4215615 3.45245,-7.0260429 2.42277,-2.6650507 7.02604,-4.3609921 4.66384,-1.695941 13.38582,-1.695941 h 3.21018 v 14.53664 q -6.48092,0 -8.47971,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48455,6.117502 -3.33131,10.963049 -2.11993,3.573591 -7.32889,6.965474 4.42156,2.543912 7.02604,6.480919 2.60448,3.876437 3.45245,9.872801 0.36342,2.604481 0.84797,16.959414 0.18171,5.269532 0.66627,6.541488 0.7874,1.877649 2.90732,2.846759 2.1805,0.969109 8.84313,0.969109 v 14.476072 h -3.21018 q -8.78255,0 -13.0224,-1.45366 -4.23986,-1.3931 -6.90491,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15081,-4.179284 -1.15081,-14.476071 0,-11.508173 -1.27196,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }), /* @__PURE__ */ wp.element.createElement("path", { d: "M -329.85728,54.856239 V 40.319598 q 5.39067,-0.242277 7.93458,-2.119927 2.60448,-1.877649 3.93701,-5.875225 1.39309,-3.997576 1.39309,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09025,-4.4215615 3.45245,-7.0260429 2.42278,-2.6650507 7.02605,-4.3609921 4.66383,-1.695941 13.38582,-1.695941 h 3.21017 v 14.53664 q -6.48092,0 -8.4797,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48456,6.117502 -3.33132,10.963049 -2.11992,3.573591 -7.32889,6.965474 4.42157,2.543912 7.02605,6.480919 2.60448,3.876437 3.45245,9.872801 0.36341,2.604481 0.84797,16.959414 0.18171,5.269532 0.66626,6.541488 0.7874,1.877649 2.90733,2.846759 2.1805,0.969109 8.84312,0.969109 v 14.476072 h -3.21017 q -8.78256,0 -13.02241,-1.45366 -4.23985,-1.3931 -6.9049,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15082,-4.179284 -1.15082,-14.476071 0,-11.508173 -1.27195,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }))
   );
 
   // modules/editor/logic-panel.jsx
@@ -1103,17 +1148,16 @@
     Fragment,
     useState: useState2,
     useEffect: useEffect2,
-    useLayoutEffect: useLayoutEffect2,
+    useLayoutEffect: useLayoutEffect3,
     useMemo,
-    useRef: useRef2,
-    useCallback: useCallback2
+    useRef: useRef3,
+    useCallback: useCallback3
   } = window.wp.element;
   var { createHigherOrderComponent } = window.wp.compose;
   var { addFilter: addFilter2 } = window.wp.hooks;
   var { InspectorControls } = window.wp.blockEditor;
   var {
     PanelBody,
-    TextControl,
     Button: Button2,
     SelectControl,
     ExternalLink
@@ -1149,7 +1193,7 @@
       }
     );
   };
-  var usePass1Conversion = (setAttributes, attrName, blockName) => useCallback2(
+  var usePass1Conversion = (setAttributes, attrName, blockName) => useCallback3(
     (attrs) => {
       if (!attrName || SKIP_CONVERT_BLOCKS.has(blockName)) return setAttributes(attrs);
       if (!(attrName in attrs)) return setAttributes(attrs);
@@ -1166,9 +1210,9 @@
   var usePass2Resolution = (attributes, attrName, blockName, postId) => {
     const [refreshTick, setRefreshTick] = useState2(0);
     const [virtualTick, setVirtualTick] = useState2(0);
-    const prevRefreshTick = useRef2(0);
-    const prevSaving = useRef2(false);
-    const localViews = useRef2(/* @__PURE__ */ new Map());
+    const prevRefreshTick = useRef3(0);
+    const prevSaving = useRef3(false);
+    const localViews = useRef3(/* @__PURE__ */ new Map());
     const isSavingPost = useSelect(
       (sel) => {
         var _a2, _b2, _c2;
@@ -1261,43 +1305,61 @@
     }
     return virtualAttributes;
   };
+  var ClassTextarea = ({ value, onChange, placeholder }) => {
+    const { __: __3 } = window.wp.i18n;
+    return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-class-field" }, /* @__PURE__ */ wp.element.createElement(
+      "label",
+      {
+        className: "components-base-control__label",
+        htmlFor: "ve-class-input"
+      },
+      __3("Template", "vector-expressions")
+    ), /* @__PURE__ */ wp.element.createElement(
+      AutoTextarea,
+      {
+        id: "ve-class-input",
+        value,
+        onChange,
+        placeholder
+      }
+    ), /* @__PURE__ */ wp.element.createElement("p", { className: "components-base-control__help" }, __3("Mix static text and", "vector-expressions"), " ", /* @__PURE__ */ wp.element.createElement("code", null, "{{ expressions }}"), " ", __3("freely. Each token is evaluated and the full string becomes the class.", "vector-expressions")));
+  };
   var LogicInspectorPanel = ({ ve_logic, update, showRef, setShowRef }) => {
     return /* @__PURE__ */ wp.element.createElement(
       PanelBody,
       {
-        title: /* @__PURE__ */ wp.element.createElement("span", { className: "ve-panel-title" }, /* @__PURE__ */ wp.element.createElement(VectorArrowLogo, null), __2("Vector Logic", "vector-expressions")),
+        title: /* @__PURE__ */ wp.element.createElement("span", { className: "ve-panel-title" }, /* @__PURE__ */ wp.element.createElement(VectorArrowLogo, null), __2("Vector Expressions", "vector-expressions")),
         initialOpen: false
       },
-      /* @__PURE__ */ wp.element.createElement("div", { style: { marginBottom: "10px" } }, /* @__PURE__ */ wp.element.createElement(
+      /* @__PURE__ */ wp.element.createElement("div", { className: "ve-section" }, /* @__PURE__ */ wp.element.createElement("p", { className: "ve-section-label" }, __2("Visibility", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
         SelectControl,
         {
-          label: __2("Visibility Logic", "vector-expressions"),
+          label: __2("Action", "vector-expressions"),
           value: (ve_logic == null ? void 0 : ve_logic.visible_action) || "show",
           options: [
             { label: __2("Show if True", "vector-expressions"), value: "show" },
             { label: __2("Hide if True", "vector-expressions"), value: "hide" }
           ],
-          onChange: (v) => update("visible_action", v)
+          onChange: (v) => update("visible_action", v),
+          __nextHasNoMarginBottom: true
         }
-      ), /* @__PURE__ */ wp.element.createElement(
-        TextControl,
+      ), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-class-field" }, /* @__PURE__ */ wp.element.createElement(
+        "label",
         {
-          label: __2("Condition Expression", "vector-expressions"),
+          className: "components-base-control__label",
+          htmlFor: "ve-condition-input"
+        },
+        __2("Condition", "vector-expressions")
+      ), /* @__PURE__ */ wp.element.createElement(
+        AutoTextarea,
+        {
+          id: "ve-condition-input",
           value: (ve_logic == null ? void 0 : ve_logic.visible) || "",
           onChange: (v) => update("visible", v),
-          placeholder: "user.is_logged_in"
+          placeholder: "user.is_logged_in",
+          className: "ve-class-textarea"
         }
-      )),
-      /* @__PURE__ */ wp.element.createElement(
-        TextControl,
-        {
-          label: __2("Dynamic Class", "vector-expressions"),
-          value: (ve_logic == null ? void 0 : ve_logic.class) || "",
-          onChange: (v) => update("class", v),
-          help: /* @__PURE__ */ wp.element.createElement("span", null, __2("Strings must be quoted.", "vector-expressions"), /* @__PURE__ */ wp.element.createElement("br", null), __2("Good:", "vector-expressions"), " ", /* @__PURE__ */ wp.element.createElement("code", null, "user.role == 'admin' ? 'vip' : ''"), /* @__PURE__ */ wp.element.createElement("br", null), __2("Bad:", "vector-expressions"), " ", /* @__PURE__ */ wp.element.createElement("code", null, "vip"))
-        }
-      ),
-      /* @__PURE__ */ wp.element.createElement("div", { className: "ve-syntax-ref-wrap" }, /* @__PURE__ */ wp.element.createElement(
+      )), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-syntax-ref-wrap" }, /* @__PURE__ */ wp.element.createElement(
         Button2,
         {
           variant: "link",
@@ -1306,10 +1368,18 @@
           onClick: () => setShowRef(!showRef),
           "aria-expanded": showRef
         },
-        __2("Syntax Reference", "vector-expressions"),
+        __2("Syntax reference", "vector-expressions"),
         " ",
         showRef ? "\u25B2" : "\u25BC"
-      ), showRef && /* @__PURE__ */ wp.element.createElement("table", { className: "ve-syntax-ref" }, /* @__PURE__ */ wp.element.createElement("tbody", null, /* @__PURE__ */ wp.element.createElement("tr", { className: "ve-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Common Variables", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Display name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.is_logged_in")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Logged in?", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.role")), /* @__PURE__ */ wp.element.createElement("td", null, __2("User role", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.title")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post title", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author_name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.meta.my_key")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post meta", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", { className: "ve-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Operators & Filters", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a == b")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Equals", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a ? b : c")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Ternary", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "val | upper")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Filter", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.date | date")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Format date", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author | get_user")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author object", "vector-expressions"))))))
+      ), showRef && /* @__PURE__ */ wp.element.createElement("table", { className: "ve-syntax-ref" }, /* @__PURE__ */ wp.element.createElement("tbody", null, /* @__PURE__ */ wp.element.createElement("tr", { className: "ve-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Variables", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Display name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.is_logged_in")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Logged in?", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.role")), /* @__PURE__ */ wp.element.createElement("td", null, __2("User role", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.title")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post title", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author_name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.meta.my_key")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post meta", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", { className: "ve-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Operators & Filters", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a == b")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Equals", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a ? b : c")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Ternary", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "val | upper")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Filter", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.date | date")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Format date", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author | get_user")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author object", "vector-expressions"))))))),
+      /* @__PURE__ */ wp.element.createElement("div", { className: "ve-section ve-section--bordered" }, /* @__PURE__ */ wp.element.createElement("p", { className: "ve-section-label" }, __2("Dynamic Class", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
+        ClassTextarea,
+        {
+          value: (ve_logic == null ? void 0 : ve_logic.class) || "",
+          onChange: (v) => update("class", v),
+          placeholder: `prefix-{{ user.role | kebab }}`
+        }
+      ))
     );
   };
   var LogicPanel = createHigherOrderComponent((BlockEdit) => {

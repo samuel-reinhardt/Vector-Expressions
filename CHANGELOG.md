@@ -20,7 +20,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Post, User & Site context roots** — Three built-in data roots cover the most common dynamic content needs out of the box.
 - **Custom field (meta) access** — Read any post or user meta field with `post.meta.my_key` or `user.meta.my_key`.
 - **Full expression language** — Supports arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`==`, `!=`, `>`, `<`), logical operators (`&&`, `||`), ternary expressions (`condition ? a : b`), dynamic bracket access (`post["title"]`), and inline string interpolation (`"Hello {user.name}"`).
-- **Built-in filters (pipes)** — Transform values with a chainable filter syntax: `upper`, `lower`, `default`, `if`, `match`, `map`, `join`, `get_post`, `get_meta`, `esc_html`, `esc_attr`, `raw`, and `render`.
+- **Built-in filters (pipes)** — Transform values with a chainable filter syntax: `upper` / `uppercase`, `lower` / `lowercase`, `upper_first` / `capitalize`, `truncate`, `trim`, `replace`, `kebab`, `default`, `if`, `match`, `map`, `join`, `prop` / `get`, `get_post`, `get_user`, `get_meta`, `date`, `esc_html`, `esc_attr`, `raw`, and `render`.
 - **Block visibility control** — Every Gutenberg block gains a **Vector Logic** panel. Set show/hide conditions with an expression evaluated per-render.
 - **Dynamic CSS class** — Append CSS classes to any block's root element based on an expression result.
 - **In-editor autocomplete** — Typing `{{` in the block editor triggers a smart autocomplete dropdown with categorised expression suggestions, icons, and preview snippets.
@@ -28,6 +28,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Excerpt rendering** — Expressions in post content are evaluated before WordPress generates post excerpts, ensuring clean, parsed output in archive loops and REST responses.
 - **Extensible via hooks** — Register custom data roots, custom filter functions, custom autocomplete completions, and more via standard WordPress filters and JavaScript hooks.
 - **`WP_DEBUG` error comments** — When debug mode is active, parse errors are surfaced as HTML comments (`<!-- VE Error: ... -->`) for easy troubleshooting.
+
+### Added
+
+- **`prop` / `get` filter** — Access a property on the result of a pipeline filter without needing parentheses. `{{ post.id | get_post | prop 'post_title' }}` is now equivalent to `{{ (post.id | get_post).post_title }}`.
+- **`truncate` filter** — Limit a string to N characters with an optional suffix (default `…`). Supports named args: `{{ post.excerpt | truncate length=120 suffix='...' }}`.
+- **`trim` filter** — Strip whitespace or a custom character set: `{{ value | trim }}` / `{{ value | trim '/' }}`.
+- **`replace` filter** — Find-and-replace: `{{ post.title | replace 'Old' 'New' }}` or with named args `search=` / `replace=`.
+- **`upper_first` / `capitalize` filter** — Uppercase the first character only: `{{ post.title | capitalize }}`.
+- **`kebab` filter** — Convert a string to a URL-safe kebab slug via WordPress's native `sanitize_title()`: `{{ post.title | kebab }}`.
+- **Filter aliases** — `uppercase` (→ `upper`), `lowercase` (→ `lower`), `capitalize` (→ `upper_first`) for more readable expressions.
+- **Keyword meta deny list** — `ObjectProxy` and `get_meta` now block meta keys containing sensitive substrings (`pass`, `token`, `secret`, `api_key`, `auth`, `nonce`, `salt`, `credential`, `private_key`) as a defense-in-depth layer beyond `is_protected_meta()`. The list is filterable via `vector_expressions/security/sensitive_meta_keywords`.
+- **`vector_expressions/error` action** — Fires on every expression evaluation failure. Allows production error tracking (logging, Sentry, etc.) without exposing details in the frontend HTML.
+
+### Fixed
+
+- `render_block_logic`: `attrs` is now always initialized as an empty array and guarded with `is_array()` before iteration.
 
 ---
 

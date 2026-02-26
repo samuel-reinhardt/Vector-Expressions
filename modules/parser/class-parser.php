@@ -46,7 +46,7 @@ class Parser {
 
 	public function __construct() {
 		$this->context = new Context();
-		$this->library = new Library();
+		$this->library = new Library( $this->context );
 	}
 
 	/**
@@ -102,7 +102,14 @@ class Parser {
 						}
 						return htmlspecialchars( $this->safe_string( $val ), ENT_QUOTES, 'UTF-8' );
 					} catch ( \Throwable $e ) {
-						return defined( 'WP_DEBUG' ) && WP_DEBUG ? '<!-- VE Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
+						/**
+						 * Fires when an expression fails to evaluate.
+						 *
+						 * @param \Throwable $e    The exception that was thrown.
+						 * @param string    $expr The expression string that failed.
+						 */
+						do_action( 'vector_expressions/error', $e, $expr );
+						return defined( 'WP_DEBUG' ) && WP_DEBUG && ( ! defined( 'WP_DEBUG_DISPLAY' ) || WP_DEBUG_DISPLAY ) ? '<!-- VE Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
 					}
 				},
 				$template
@@ -141,7 +148,14 @@ class Parser {
 					return htmlspecialchars( $this->safe_string( $val ), ENT_QUOTES, 'UTF-8' );
 
 				} catch ( \Throwable $e ) {
-					return defined( 'WP_DEBUG' ) && WP_DEBUG ? '<!-- VE Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
+					/**
+					 * Fires when an expression fails to evaluate.
+					 *
+					 * @param \Throwable $e    The exception that was thrown.
+					 * @param string    $expr The expression string that failed.
+					 */
+					do_action( 'vector_expressions/error', $e, $expr );
+					return defined( 'WP_DEBUG' ) && WP_DEBUG && ( ! defined( 'WP_DEBUG_DISPLAY' ) || WP_DEBUG_DISPLAY ) ? '<!-- VE Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
 				}
 			},
 			$template

@@ -13,6 +13,7 @@
 import { fetchPreview }                              from './api.js';
 import { getCompletions, SKIP_CONVERT_BLOCKS, TOKEN_REGEX } from './constants.js';
 import { VectorArrowLogo }                           from './logo.jsx';
+import { AutoTextarea }                              from './auto-textarea.jsx';
 
 const {
 	Fragment, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback,
@@ -20,7 +21,7 @@ const {
 const { createHigherOrderComponent }                  = window.wp.compose;
 const { addFilter }                                   = window.wp.hooks;
 const { InspectorControls }                           = window.wp.blockEditor;
-const { PanelBody, TextControl, Button,
+const { PanelBody, Button,
 	SelectControl, ExternalLink }                     = window.wp.components;
 const { __ }                                          = window.wp.i18n;
 const { select, useSelect }                           = window.wp.data;
@@ -235,6 +236,37 @@ const usePass2Resolution = ( attributes, attrName, blockName, postId ) => {
 };
 
 /**
+ * ClassTextarea — thin wrapper around AutoTextarea with the class-field
+ * label and help text layout.
+ *
+ * @param {{ value: string, onChange: Function, placeholder: string }} props
+ */
+const ClassTextarea = ( { value, onChange, placeholder } ) => {
+	const { __ } = window.wp.i18n;
+	return (
+		<div className="ve-class-field">
+			<label
+				className="components-base-control__label"
+				htmlFor="ve-class-input"
+			>
+				{ __( 'Template', 'vector-expressions' ) }
+			</label>
+			<AutoTextarea
+				id="ve-class-input"
+				value={ value }
+				onChange={ onChange }
+				placeholder={ placeholder }
+			/>
+			<p className="components-base-control__help">
+				{ __( 'Mix static text and', 'vector-expressions' ) }{ ' ' }
+				<code>{ '{{ expressions }}' }</code>{ ' ' }
+				{ __( 'freely. Each token is evaluated and the full string becomes the class.', 'vector-expressions' ) }
+			</p>
+		</div>
+	);
+};
+
+/**
  * Pure render component for the "Vector Logic" inspector panel.
  *
  * @param {{
@@ -251,75 +283,86 @@ const LogicInspectorPanel = ( { ve_logic, update, showRef, setShowRef } ) => {
 			title={
 				<span className="ve-panel-title">
 					<VectorArrowLogo />
-					{ __( 'Vector Logic', 'vector-expressions' ) }
+					{ __( 'Vector Expressions', 'vector-expressions' ) }
 				</span>
 			}
 			initialOpen={ false }
 		>
-			<div style={ { marginBottom: '10px' } }>
+			{ /* ── Visibility ───────────────────────────────── */ }
+			<div className="ve-section">
+				<p className="ve-section-label">{ __( 'Visibility', 'vector-expressions' ) }</p>
+
 				<SelectControl
-					label={ __( 'Visibility Logic', 'vector-expressions' ) }
+					label={ __( 'Action', 'vector-expressions' ) }
 					value={ ve_logic?.visible_action || 'show' }
 					options={ [
 						{ label: __( 'Show if True', 'vector-expressions' ), value: 'show' },
 						{ label: __( 'Hide if True', 'vector-expressions' ), value: 'hide' },
 					] }
 					onChange={ ( v ) => update( 'visible_action', v ) }
+					__nextHasNoMarginBottom
 				/>
-				<TextControl
-					label={ __( 'Condition Expression', 'vector-expressions' ) }
-					value={ ve_logic?.visible || '' }
-					onChange={ ( v ) => update( 'visible', v ) }
-					placeholder="user.is_logged_in"
+
+				<div className="ve-class-field">
+					<label
+						className="components-base-control__label"
+						htmlFor="ve-condition-input"
+					>
+						{ __( 'Condition', 'vector-expressions' ) }
+					</label>
+					<AutoTextarea
+						id="ve-condition-input"
+						value={ ve_logic?.visible || '' }
+						onChange={ ( v ) => update( 'visible', v ) }
+						placeholder="user.is_logged_in"
+						className="ve-class-textarea"
+					/>
+				</div>
+
+				{ /* Syntax Reference – right below the field it helps with */ }
+				<div className="ve-syntax-ref-wrap">
+					<Button
+						variant="link"
+						size="small"
+						className="ve-syntax-ref-toggle"
+						onClick={ () => setShowRef( ! showRef ) }
+						aria-expanded={ showRef }
+					>
+						{ __( 'Syntax reference', 'vector-expressions' ) }{ ' ' }{ showRef ? '▲' : '▼' }
+					</Button>
+					{ showRef && (
+						<table className="ve-syntax-ref">
+							<tbody>
+								<tr className="ve-ref-head"><th colSpan="2">{ __( 'Variables', 'vector-expressions' ) }</th></tr>
+								<tr><td><code>{ 'user.name' }</code></td><td>{ __( 'Display name', 'vector-expressions' ) }</td></tr>
+								<tr><td><code>{ 'user.is_logged_in' }</code></td><td>{ __( 'Logged in?', 'vector-expressions' ) }</td></tr>
+								<tr><td><code>{ 'user.role' }</code></td><td>{ __( 'User role', 'vector-expressions' ) }</td></tr>
+								<tr><td><code>{ 'post.title' }</code></td><td>{ __( 'Post title', 'vector-expressions' ) }</td></tr>
+								<tr><td><code>{ 'post.author_name' }</code></td><td>{ __( 'Author name', 'vector-expressions' ) }</td></tr>
+								<tr><td><code>{ 'post.meta.my_key' }</code></td><td>{ __( 'Post meta', 'vector-expressions' ) }</td></tr>
+								<tr className="ve-ref-head"><th colSpan="2">{ __( 'Operators & Filters', 'vector-expressions' ) }</th></tr>
+								<tr><td><code>{ 'a == b' }</code></td><td>{ __( 'Equals', 'vector-expressions' ) }</td></tr>
+								<tr><td><code>{ 'a ? b : c' }</code></td><td>{ __( 'Ternary', 'vector-expressions' ) }</td></tr>
+								<tr><td><code>{ 'val | upper' }</code></td><td>{ __( 'Filter', 'vector-expressions' ) }</td></tr>
+								<tr><td><code>{ 'post.date | date' }</code></td><td>{ __( 'Format date', 'vector-expressions' ) }</td></tr>
+								<tr><td><code>{ "post.author | get_user" }</code></td><td>{ __( 'Author object', 'vector-expressions' ) }</td></tr>
+							</tbody>
+						</table>
+					) }
+				</div>
+			</div>
+
+			{ /* ── Dynamic Class ────────────────────────────── */ }
+			<div className="ve-section ve-section--bordered">
+				<p className="ve-section-label">{ __( 'Dynamic Class', 'vector-expressions' ) }</p>
+
+				<ClassTextarea
+					value={ ve_logic?.class || '' }
+					onChange={ ( v ) => update( 'class', v ) }
+					placeholder={ `prefix-{{ user.role | kebab }}` }
 				/>
 			</div>
 
-			<TextControl
-				label={ __( 'Dynamic Class', 'vector-expressions' ) }
-				value={ ve_logic?.class || '' }
-				onChange={ ( v ) => update( 'class', v ) }
-				help={
-					<span>
-						{ __( 'Strings must be quoted.', 'vector-expressions' ) }<br />
-						{ __( 'Good:', 'vector-expressions' ) }{ ' ' }
-						<code>{ "user.role == 'admin' ? 'vip' : ''" }</code><br />
-						{ __( 'Bad:', 'vector-expressions' ) }{ ' ' }
-						<code>vip</code>
-					</span>
-				}
-			/>
-
-
-			<div className="ve-syntax-ref-wrap">
-				<Button
-					variant="link"
-					size="small"
-					className="ve-syntax-ref-toggle"
-					onClick={ () => setShowRef( ! showRef ) }
-					aria-expanded={ showRef }
-				>
-					{ __( 'Syntax Reference', 'vector-expressions' ) }{ ' ' }{ showRef ? '▲' : '▼' }
-				</Button>
-				{ showRef && (
-					<table className="ve-syntax-ref">
-						<tbody>
-							<tr className="ve-ref-head"><th colSpan="2">{ __( 'Common Variables', 'vector-expressions' ) }</th></tr>
-							<tr><td><code>{ 'user.name' }</code></td><td>{ __( 'Display name', 'vector-expressions' ) }</td></tr>
-							<tr><td><code>{ 'user.is_logged_in' }</code></td><td>{ __( 'Logged in?', 'vector-expressions' ) }</td></tr>
-							<tr><td><code>{ 'user.role' }</code></td><td>{ __( 'User role', 'vector-expressions' ) }</td></tr>
-							<tr><td><code>{ 'post.title' }</code></td><td>{ __( 'Post title', 'vector-expressions' ) }</td></tr>
-							<tr><td><code>{ 'post.author_name' }</code></td><td>{ __( 'Author name', 'vector-expressions' ) }</td></tr>
-							<tr><td><code>{ 'post.meta.my_key' }</code></td><td>{ __( 'Post meta', 'vector-expressions' ) }</td></tr>
-							<tr className="ve-ref-head"><th colSpan="2">{ __( 'Operators & Filters', 'vector-expressions' ) }</th></tr>
-							<tr><td><code>{ 'a == b' }</code></td><td>{ __( 'Equals', 'vector-expressions' ) }</td></tr>
-							<tr><td><code>{ 'a ? b : c' }</code></td><td>{ __( 'Ternary', 'vector-expressions' ) }</td></tr>
-							<tr><td><code>{ 'val | upper' }</code></td><td>{ __( 'Filter', 'vector-expressions' ) }</td></tr>
-							<tr><td><code>{ 'post.date | date' }</code></td><td>{ __( 'Format date', 'vector-expressions' ) }</td></tr>
-							<tr><td><code>{ "post.author | get_user" }</code></td><td>{ __( 'Author object', 'vector-expressions' ) }</td></tr>
-						</tbody>
-					</table>
-				) }
-			</div>
 		</PanelBody>
 	);
 };

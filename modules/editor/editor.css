@@ -37,7 +37,6 @@
 	--ve-font-sm:        12px;
 	--ve-locked-opacity: 0.6;
 	--ve-logo-size:      16px;
-	--ve-panel-gap:      6px;
 }
 
 /**
@@ -46,12 +45,42 @@
 .ve-panel-title {
 	display: inline-flex;
 	align-items: center;
-	gap: var( --ve-panel-gap );
+	gap: 10px;
+}
+
+/**
+ * Section dividers — VISIBILITY / DYNAMIC CLASS grouping.
+ *
+ * `.ve-section` adds consistent vertical rhythm between control groups.
+ * `.ve-section--bordered` adds a top separator to visually distinguish
+ * the Dynamic Class section from the Visibility group above it.
+ */
+.ve-section {
+	padding-bottom: 4px;
+}
+
+.ve-section--bordered {
+	padding-top: 16px;
+	margin-top: 8px;
+	border-top: 1px solid #e0e0e0;
+}
+
+/**
+ * Section label — small uppercase category header, matching WP's
+ * ToolsPanel and similar grouping patterns in the block editor.
+ */
+.ve-section-label {
+	margin: 0 0 10px;
+	font-size: 10px;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: #757575;
 }
 
 .ve-logo {
-	width: var( --ve-logo-size );
-	height: auto;
+	width:       var( --ve-logo-size );
+	height:      var( --ve-logo-size );
 	flex-shrink: 0;
 }
 
@@ -82,12 +111,11 @@
 }
 
 /**
- * Syntax reference toggle + table.
+ * Syntax reference toggle + table — now lives inside .ve-section,
+ * so top border/padding replaces the former standalone separator.
  */
 .ve-syntax-ref-wrap {
-	margin-top: 12px;
-	border-top: 1px solid #ddd;
-	padding-top: 8px;
+	margin-top: 10px;
 }
 
 .ve-syntax-ref-toggle {
@@ -407,4 +435,56 @@
 /* Layout utility — replaces inline style spacer divs */
 .ve-spacer {
 	height: 5px;
+}
+
+/* ── Dynamic Class textarea ───────────────────────────────────────────────── */
+
+.ve-class-field {
+	margin-bottom: 0;
+}
+
+.ve-class-field .components-base-control__label {
+	display: block;
+	margin-bottom: 4px;
+}
+
+.ve-class-field .components-base-control__help {
+	margin-top: 6px;
+	font-size: 11px;
+	color: #757575;
+}
+
+/**
+ * Code-block treatment: light gray background + neutral border signals
+ * "this is a template expression field", visually distinct from plain
+ * text inputs while staying within the WP editor palette.
+ */
+.ve-class-textarea {
+	display: block;
+	width: 100%;
+	min-height: 36px;
+	padding: 6px 8px;
+	font-size: 12.5px;
+	font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+	line-height: 1.6;
+	color: #1e1e1e;
+	background: #f6f8fa;
+	border: 1px solid #d0d7de;
+	border-radius: 4px;
+	resize: none;
+	overflow: hidden;
+	box-sizing: border-box;
+	transition: border-color 0.1s, box-shadow 0.1s, background 0.1s;
+}
+
+.ve-class-textarea:focus {
+	border-color: #007cba;
+	box-shadow: 0 0 0 1.5px #007cba;
+	outline: none;
+	background: #fff;
+}
+
+.ve-class-textarea::placeholder {
+	color: #a0adb8;
+	font-style: italic;
 }

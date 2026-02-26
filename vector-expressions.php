@@ -306,6 +306,7 @@ final class VectorExpressions {
 		$instructions = [
 			'render' => true,
 			'class'  => [],
+			'attrs'  => [],
 		];
 
 		// Evaluate visibility condition.
@@ -320,10 +321,12 @@ final class VectorExpressions {
 			}
 		}
 
-		// Evaluate dynamic class expression.
+		// Evaluate dynamic class as a template string so static text and
+		// multiple {{ expression }} tokens can coexist in a single value.
+		// e.g. "--my-class-{{ user.name | kebab }} --other-{{ post.title | kebab }}"
 		if ( $instructions['render'] && ! empty( $logic['class'] ) ) {
-			$cls = $this->parser->evaluate_raw( $logic['class'] );
-			if ( $cls && is_string( $cls ) ) {
+			$cls = trim( (string) $this->parser->parse( $logic['class'] ) );
+			if ( '' !== $cls ) {
 				$instructions['class'][] = $cls;
 			}
 		}
@@ -417,7 +420,7 @@ final class VectorExpressions {
 			[ 'action', 'formaction', 'href', 'src', 'xlink:href' ]
 		);
 
-		foreach ( $instructions['attrs'] as $key => $val ) {
+		foreach ( ( is_array( $instructions['attrs'] ) ? $instructions['attrs'] : [] ) as $key => $val ) {
 			$clean_key = strtolower( trim( (string) $key ) );
 
 			if ( str_starts_with( $clean_key, 'on' ) || in_array( $clean_key, $deny_list, true ) ) {

@@ -7,12 +7,13 @@
 
 import { fetchPreview }       from './api.js';
 import { POPOVER_FOCUS_DELAY, getCompletions, VE_ROOTS } from './constants.js';
+import { AutoTextarea }       from './auto-textarea.jsx';
 
 const {
 	useState, useEffect, useLayoutEffect, useRef, useCallback,
 } = window.wp.element;
 const {
-	Popover, Button, TextareaControl, TabPanel, Icon
+	Popover, Button, TabPanel, Icon
 } = window.wp.components;
 const { __ }                                    = window.wp.i18n;
 const { registerFormatType, applyFormat,
@@ -434,11 +435,12 @@ const TokenPopover = ( { anchor, getFallbackAnchor, editExpr, setEdit, onUpdate,
 			{/* Header & Input */}
 			<div style={ { display: 'flex', flexDirection: 'column', gap: '8px' } }>
 				<label style={{ fontSize: '13px', fontWeight: 600 }}>{ __( 'Vector Expression', 'vector-expressions' ) }</label>
-				<TextareaControl 
-					className="ve-expr-input" 
-					rows={1}
+				<AutoTextarea
+					className="ve-expr-input ve-class-textarea"
 					value={ editExpr }
 					onChange={ ( val ) => setEdit( val ) }
+					placeholder="user.is_logged_in"
+					inputRef={ inputRef }
 					onKeyDown={ async ( e ) => {
 						if ( e.key === 'Enter' && ! e.shiftKey ) {
 							e.preventDefault();
