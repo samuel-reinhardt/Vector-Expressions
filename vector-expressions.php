@@ -77,7 +77,7 @@ final class VectorExpressions {
 		add_action( 'enqueue_block_editor_assets', [ $this, 'enqueue_assets' ] );
 		add_action( 'enqueue_block_assets',        [ $this, 'enqueue_shared_assets' ] );
 		add_filter( 'plugin_row_meta',             [ $this, 'plugin_row_meta' ], 10, 2 );
-		add_filter( 'wp_kses_allowed_html',        [ $this, 'allow_expression_mark_tag' ], 10, 2 );
+		add_filter( 'wp_kses_allowed_html',        [ $this, 'allow_expression_span_tag' ], 10, 2 );
 		add_action( 'rest_api_init',               [ $this, 'register_rest_routes' ] );
 	}
 
@@ -104,17 +104,17 @@ final class VectorExpressions {
 	}
 
 	/**
-	 * Whitelist the `data-ve-expr` attribute on `<mark>` tags so wp_kses_post
+	 * Whitelist the `data-ve-expr` attribute on `<span>` tags so wp_kses_post
 	 * does not strip expression data when a post is saved via the REST API.
 	 *
 	 * @param array<string, array<string, bool>> $allowed  Allowed tags + attributes.
 	 * @param string                             $context  Kses context (e.g. 'post').
 	 * @return array<string, array<string, bool>> Modified allowed-HTML map.
 	 */
-	public function allow_expression_mark_tag( array $allowed, string $context ): array {
+	public function allow_expression_span_tag( array $allowed, string $context ): array {
 		if ( 'post' === $context ) {
-			$allowed['mark'] = array_merge(
-				$allowed['mark'] ?? [],
+			$allowed['span'] = array_merge(
+				$allowed['span'] ?? [],
 				[
 					'class'               => true,
 					'data-ve-expr'        => true,

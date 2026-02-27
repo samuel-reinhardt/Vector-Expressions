@@ -19,75 +19,63 @@ const { __ }                                    = window.wp.i18n;
 const { registerFormatType, applyFormat,
 	removeFormat, concat, slice, useAnchor }    = window.wp.richText;
 const { select }                                = window.wp.data;
+const { RichTextToolbarButton }                 = window.wp.blockEditor;
 
 /**
- * Mirrors `data-ve-active` on the active token mark in sync with
- * Gutenberg's `isActive` prop, and strips the attribute on focusout.
+ * Mirrors `data-ve-active` on the active token span in sync with
+ * Gutenberg's `isActive` prop. Strips the attribute only when the
+ * popover is closed to ensure a stable anchor target while editing.
  *
  * @param {boolean} isActive
  * @param {React.RefObject} contentRef
+ * @param {boolean} popoverOpen
  */
-const useActiveTokenState = ( isActive, contentRef ) => {
+const useActiveTokenState = ( isActive, contentRef, popoverOpen ) => {
 	useEffect( () => {
 		const el = contentRef?.current;
 		if ( ! el ) return;
 
 		if ( isActive ) {
-			const mark = el.querySelector( 'mark.ve-expr-token[data-rich-text-format-boundary]' );
-			if ( mark ) mark.setAttribute( 'data-ve-active', '' );
-		} else {
-			el.querySelectorAll( 'mark.ve-expr-token' ).forEach( ( m ) => {
+			const span = el.querySelector( 'span.ve-expr-token[data-rich-text-format-boundary]' );
+			if ( span ) span.setAttribute( 'data-ve-active', '' );
+		} else if ( ! popoverOpen ) {
+			// We might also be left stranded if normal editing removed the boundary span but left other ones.
+			el.querySelectorAll( 'span.ve-expr-token' ).forEach( ( m ) => {
 				m.removeAttribute( 'data-ve-active' );
 				m.removeAttribute( 'data-rich-text-format-boundary' );
 			} );
 		}
-	}, [ isActive, contentRef ] );
-
-	useEffect( () => {
-		const el = contentRef?.current;
-		if ( ! el ) return;
-
-		const onFocusOut = ( evt ) => {
-			if ( el.contains( evt.relatedTarget ) ) return;
-			el.querySelectorAll( 'mark.ve-expr-token' ).forEach( ( m ) => {
-				m.removeAttribute( 'data-ve-active' );
-				m.removeAttribute( 'data-rich-text-format-boundary' );
-			} );
-		};
-
-		el.addEventListener( 'focusout', onFocusOut );
-		return () => el.removeEventListener( 'focusout', onFocusOut );
-	}, [ contentRef?.current ] );
+	}, [ isActive, contentRef, popoverOpen ] );
 };
 
 /**
- * Walks up the DOM from `n` to find the nearest `mark.ve-expr-token`, or null.
+ * Walks up the DOM from `n` to find the nearest `span.ve-expr-token`, or null.
  *
  * @param {Node}    n   Starting node.
  * @param {Element} el  Boundary element (the editor root).
  * @returns {Element|null}
  */
-const getTokenMark = ( n, el ) => {
+const getTokenSpan = ( n, el ) => {
 	let cur = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
 	while ( cur && cur !== el ) {
-		if ( cur.tagName === 'MARK' && cur.classList.contains( 've-expr-token' ) ) return cur;
+		if ( cur.tagName === 'SPAN' && cur.classList.contains( 've-expr-token' ) ) return cur;
 		cur = cur.parentElement;
 	}
 	return null;
 };
 
 /**
- * Collapses `sel` to just before or after `mark`.
+ * Collapses `sel` to just before or after `span`.
  *
  * @param {Selection}        sel
  * @param {Document}         doc
- * @param {Element}          mark
+ * @param {Element}          span
  * @param {'before'|'after'} side
  */
-const placeCursorAdjacentToMark = ( sel, doc, mark, side ) => {
+const placeCursorAdjacentToSpan = ( sel, doc, span, side ) => {
 	const range = doc.createRange();
-	if ( side === 'before' ) range.setStartBefore( mark );
-	else                     range.setStartAfter( mark );
+	if ( side === 'before' ) range.setStartBefore( span );
+	else                     range.setStartAfter( span );
 	range.collapse( true );
 	sel.removeAllRanges();
 	sel.addRange( range );
@@ -108,20 +96,18 @@ const placeCursorAdjacentToMark = ( sel, doc, mark, side ) => {
  * @param {{
  *   isActiveRef:       React.RefObject<boolean>,
  *   popoverOpenRef:    React.RefObject<boolean>,
- *   anchorRef:         React.RefObject<*>,
- *   activeMarkRef:     React.RefObject<Element>,
  *   dismissPopoverRef: React.RefObject<Function>,
  *   setPopoverOpenRef: React.RefObject<Function>,
  * }} refs
  */
 const useTokenEventListeners = ( contentRef, refs ) => {
 	useEffect( () => {
-		const el = contentRef?.current;
-		if ( ! el ) return;
-
-		const doc = el.ownerDocument || document;
+		let interval = null;
+		let el       = null;
 
 		const onKeyDown = ( evt ) => {
+			if ( ! el ) return;
+
 			const { key } = evt;
 
 			if ( key === 'Escape' && refs.popoverOpenRef.current ) {
@@ -131,10 +117,8 @@ const useTokenEventListeners = ( contentRef, refs ) => {
 				return;
 			}
 
-			if ( ! el.contains( evt.target ) ) return;
-
 			if ( key === 'Tab' ) {
-				const listbox = doc.querySelector( '[role="listbox"].components-autocomplete__results' );
+				const listbox = el.ownerDocument.querySelector( '[role="listbox"].components-autocomplete__results' );
 				if ( listbox ) {
 					const selected = listbox.querySelector( '[aria-selected="true"]' );
 					if ( selected ) {
@@ -146,41 +130,35 @@ const useTokenEventListeners = ( contentRef, refs ) => {
 				}
 			}
 
-			const iframeWin = el.ownerDocument.defaultView;
+			const iframeDoc = el.ownerDocument;
+			const iframeWin = iframeDoc.defaultView;
 			const sel       = iframeWin.getSelection();
 			if ( ! sel || ! sel.rangeCount ) return;
 			const range = sel.getRangeAt( 0 );
 			const node  = range.startContainer;
 
 			if ( key === 'ArrowLeft' || key === 'ArrowRight' ) {
-				const mark = getTokenMark( node, el );
-				if ( mark ) {
+				const span = getTokenSpan( node, el );
+				if ( span ) {
 					evt.preventDefault();
 					evt.stopPropagation();
-					placeCursorAdjacentToMark( sel, doc, mark, key === 'ArrowLeft' ? 'before' : 'after' );
+					placeCursorAdjacentToSpan( sel, iframeDoc, span, key === 'ArrowLeft' ? 'before' : 'after' );
 				}
 			}
 
 			if ( key === 'Enter' || key === ' ' ) {
 				if ( refs.isActiveRef.current ) {
-					const inside = getTokenMark( node, el );
+					const inside = getTokenSpan( node, el );
 					if ( inside || ! range.collapsed ) {
 						evt.preventDefault();
 						evt.stopPropagation();
-						const markEl = inside || refs.anchorRef.current;
-						refs.activeMarkRef.current = markEl;
-						// Update both the mutable ref (synchronous, read by the
-						// setPopoverOpenRef wrapper instantly) and React state.
-						refs.anchorRef.current = markEl;
-						refs.setAnchorRef.current?.( markEl );
 						refs.setPopoverOpenRef.current( true );
 					}
 					return;
 				}
 			}
 
-			// Relocate cursor adjacent to the token before any printable character
-			// lands, so characters never insert inside the contenteditable=false mark.
+			// Relocate cursor adjacent to the token before any printable character lands
 			if (
 				refs.isActiveRef.current &&
 				! refs.popoverOpenRef.current &&
@@ -188,46 +166,39 @@ const useTokenEventListeners = ( contentRef, refs ) => {
 				! evt.ctrlKey &&
 				! evt.metaKey
 			) {
-				const mark = getTokenMark( node, el );
-				if ( mark ) {
+				const span = getTokenSpan( node, el );
+				if ( span ) {
 					const isStart =
-						( node.nodeType === Node.TEXT_NODE || node === mark ) &&
+						( node.nodeType === Node.TEXT_NODE || node === span ) &&
 						range.startOffset === 0;
-					placeCursorAdjacentToMark( sel, doc, mark, isStart ? 'before' : 'after' );
+					placeCursorAdjacentToSpan( sel, iframeDoc, span, isStart ? 'before' : 'after' );
 				}
 			}
 		};
 
-		const onClickToken = ( evt ) => {
-			if (
-				! el.contains( evt.target ) ||
-				evt.target.tagName !== 'MARK' ||
-				! evt.target.classList.contains( 've-expr-token' )
-			) return;
-
-			const iframeDoc = el.ownerDocument;
-			const iframeWin = iframeDoc.defaultView;
-			const range     = iframeDoc.createRange();
-			range.setStartBefore( evt.target );
-			range.collapse( true );
-			iframeWin.getSelection().removeAllRanges();
-			iframeWin.getSelection().addRange( range );
-
-			refs.activeMarkRef.current = evt.target;
-			// Update the mutable ref synchronously so the setPopoverOpenRef
-			// wrapper sees the anchor before React batches the state update.
-			refs.anchorRef.current = evt.target;
-			refs.setAnchorRef.current?.( evt.target );
-			refs.setPopoverOpenRef.current( true );
+		const tryAttach = () => {
+			if ( el ) return true;
+			if ( contentRef.current ) {
+				el = contentRef.current;
+				el.addEventListener( 'keydown', onKeyDown, true );
+				return true;
+			}
+			return false;
 		};
 
-		doc.addEventListener( 'keydown', onKeyDown, true );
-		doc.addEventListener( 'click', onClickToken, true );
+		if ( ! tryAttach() ) {
+			interval = setInterval( () => {
+				if ( tryAttach() ) clearInterval( interval );
+			}, 100 );
+		}
+
 		return () => {
-			doc.removeEventListener( 'keydown', onKeyDown, true );
-			doc.removeEventListener( 'click', onClickToken, true );
+			if ( interval ) clearInterval( interval );
+			if ( el ) {
+				el.removeEventListener( 'keydown', onKeyDown, true );
+			}
 		};
-	}, [ contentRef ] );
+	}, [] );
 };
 
 // ── ExpressionSuggestions ────────────────────────────────────────────────────
@@ -451,6 +422,12 @@ const TokenPopover = ( { anchor, getFallbackAnchor, editExpr, setEdit, onUpdate,
 					placeholder="user.is_logged_in"
 					inputRef={ inputRef }
 					onKeyDown={ async ( e ) => {
+						if ( e.key === 'Escape' ) {
+							e.preventDefault();
+							e.stopPropagation();
+							onDismiss();
+							return;
+						}
 						if ( e.key === 'Enter' && ! e.shiftKey ) {
 							e.preventDefault();
 							await onUpdate();
@@ -531,121 +508,45 @@ const TokenPopover = ( { anchor, getFallbackAnchor, editExpr, setEdit, onUpdate,
  *   contentRef:       React.RefObject,
  * }} props
  */
-/**
- * Returns a DOMRect-like object whose coordinates are relative to the
- * main-window viewport, correcting for the editor iframe's own position.
- *
- * @returns {DOMRect|null}
- */
-const getViewportCorrectedRect = () => {
-	const iframe = document.querySelector( 'iframe[name="editor-canvas"]' );
-	const win    = iframe ? iframe.contentWindow : window;
-	const sel    = win?.getSelection();
-	if ( ! sel?.rangeCount ) return null;
-
-	const selRect    = sel.getRangeAt( 0 ).getBoundingClientRect();
-	const iframeRect = iframe ? iframe.getBoundingClientRect() : { top: 0, left: 0 };
-
-	const top    = selRect.top    + iframeRect.top;
-	const left   = selRect.left   + iframeRect.left;
-	const bottom = selRect.bottom + iframeRect.top;
-	const right  = selRect.right  + iframeRect.left;
-
-	return {
-		top, left, bottom, right,
-		width:  selRect.width,
-		height: selRect.height,
-		x: left,
-		y: top,
-		toJSON() { return this; },
-	};
-};
-
 const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentRef } ) => {
 	const [ editExpr,       setEdit ]           = useState( '' );
 	const [ popoverOpen,    setPopoverOpen ]     = useState( false );
 	const [ livePreview,    setLivePreview ]     = useState( null );
-	const [ frozenInsertRect, setFrozenInsertRect ] = useState( null );
 	const inputRef = useRef( null );
 
 	const isActiveRef       = useRef( false );
-	const anchorRef         = useRef( null );
-	const activeMarkRef     = useRef( null );
 	const popoverOpenRef    = useRef( false );
 	const dismissPopoverRef = useRef( null );
 	const setPopoverOpenRef = useRef( null );
 
 	// Keep refs current synchronously on every render.
-	// Wrap setPopoverOpen so opening the popover without a DOM anchor (new
-	// insertion flow) immediately snapshots a viewport-corrected rect. This
-	// prevents the Popover from jumping after it renders into the portal.
-	setPopoverOpenRef.current = ( open ) => {
-		if ( open && ! anchorRef.current ) {
-			setFrozenInsertRect( getViewportCorrectedRect() );
-		} else if ( ! open ) {
-			setFrozenInsertRect( null );
-		}
-		setPopoverOpen( open );
-	};
+	setPopoverOpenRef.current = setPopoverOpen;
 	popoverOpenRef.current = popoverOpen;
 
-	const [ anchor, setAnchor ] = useState( null );
-
-	useEffect( () => {
-		if ( isActive ) {
-			const timer = setTimeout( () => {
-				const iframe = document.querySelector( 'iframe[name="editor-canvas"]' );
-				const doc = iframe ? iframe.contentDocument : document;
-				const win = iframe ? iframe.contentWindow : window;
-
-				if ( ! doc || ! win ) return;
-
-				const selection = win.getSelection();
-				
-				if ( selection && selection.rangeCount > 0 ) {
-					let pointerNode = selection.getRangeAt( 0 ).startContainer;
-					
-					if ( pointerNode.nodeType === 3 ) {
-						pointerNode = pointerNode.parentNode;
-					}
-
-					let activeNode = pointerNode?.closest( '.ve-expr-token' ) || null;
-
-					// If the selection is just outside the token (e.g. from our click
-					// handler relocating it) but the popover is open for a valid token,
-					// keep the current anchor so the popover doesn't crash or unmount.
-					if ( ! activeNode && popoverOpenRef.current && activeMarkRef.current?.isConnected ) {
-						activeNode = activeMarkRef.current;
-					}
-
-					setAnchor( activeNode );
-				} else {
-					if ( popoverOpenRef.current && activeMarkRef.current?.isConnected ) {
-						setAnchor( activeMarkRef.current );
-					} else {
-						setAnchor( null );
-					}
-				}
-			}, 10 );
-
-			return () => clearTimeout( timer );
-		} else {
-			setAnchor( null );
-		}
-	}, [ isActive, value ] );
+	// Native Gutenberg hook to track the active selection range or node across the iframe boundary.
+	const virtualAnchor = useAnchor( {
+		editableContentElement: contentRef.current,
+		settings: { tagName: 'span', className: 've-expr-token' }
+	} );
 
 	// useLayoutEffect so refs are updated before any keydown can fire.
 	useLayoutEffect( () => { isActiveRef.current = isActive; }, [ isActive ] );
-	useLayoutEffect( () => { anchorRef.current   = anchor;   }, [ anchor ]   );
 
-	useActiveTokenState( isActive, contentRef );
-	const setAnchorRef = useRef( null );
-	setAnchorRef.current = setAnchor;
+	useActiveTokenState( isActive, contentRef, popoverOpen );
 
 	useTokenEventListeners( contentRef, {
-		isActiveRef, popoverOpenRef, anchorRef,
-		activeMarkRef, dismissPopoverRef, setPopoverOpenRef, setAnchorRef,
+		isActiveRef, popoverOpenRef,
+		dismissPopoverRef, setPopoverOpenRef,
 	} );
+
+	// Automatically open the popover if the format becomes active.
+	// This replaces brittle global click listeners, relying on Gutenberg
+	// natively triggering `isActive` true when a token is cursor'd into or clicked.
+	useEffect( () => {
+		if ( isActive && ! popoverOpen ) {
+			setPopoverOpen( true );
+		}
+	}, [ isActive ] );
 
 	useEffect( () => {
 		if ( isActive && activeAttributes?.expr ) {
@@ -655,7 +556,7 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 				valid: activeAttributes.valid !== 'false' 
 			} );
 		}
-	}, [ isActive, activeAttributes?.expr, activeAttributes?.view, activeAttributes?.valid ] );
+	}, [ isActive, popoverOpen, activeAttributes?.expr, activeAttributes?.view, activeAttributes?.valid ] );
 
 	// Debounced real-time preview computation
 	useEffect( () => {
@@ -729,13 +630,12 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 
 	const dismissPopover = useCallback( () => {
 		setPopoverOpen( false );
-		setFrozenInsertRect( null );
 		const el   = contentRef?.current;
-		const mark = activeMarkRef.current;
-		if ( el && mark ) {
+		const span = el?.querySelector( 'span[data-ve-active]' );
+		if ( el && span ) {
 			const iframeDoc = el.ownerDocument;
 			const range     = iframeDoc.createRange();
-			range.setStartBefore( mark );
+			range.setStartAfter( span );
 			range.collapse( true );
 			const sel = iframeDoc.defaultView.getSelection();
 			sel.removeAllRanges();
@@ -744,32 +644,50 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 		el?.focus();
 	}, [ contentRef ] );
 
-	dismissPopoverRef.current = dismissPopover;
+	const NativeToolbarButton = (
+		<RichTextToolbarButton
+			icon={ () => <Icon icon="database" /> }
+			title={ __( 'Edit Vector Expression', 'vector-expressions' ) }
+			onClick={ () => setPopoverOpen( true ) }
+			isActive={ isActive }
+		/>
+	);
 
-	if ( ! popoverOpen ) return null;
+	if ( ! popoverOpen ) return NativeToolbarButton;
 
-	// Build the effective anchor:
-	// - For editing an existing token: the mark DOM node (most reliable).
-	// - For inserting a new token: a frozen viewport-corrected rect captured at
-	//   open time, so the popover never repositions after initial paint.
-	const effectiveAnchor = anchor
-		? anchor
-		: frozenInsertRect
-			? { getBoundingClientRect: () => frozenInsertRect }
-			: null;
+	// Build a dynamic virtual anchor that ALWAYS queries the live DOM for the active span.
+	// This prevents "Cannot read properties of null" crashes caused by passing detached React
+	// nodes to Popover (which happens constantly during rich text parsing).
+	const dynamicAnchor = {
+		getBoundingClientRect: () => {
+			const activeSpan = contentRef?.current?.querySelector( 'span[data-ve-active]' );
+			if ( activeSpan ) {
+				return activeSpan.getBoundingClientRect();
+			}
+			// Fallback to Gutenberg's native virtual anchor
+			if ( virtualAnchor && typeof virtualAnchor.getBoundingClientRect === 'function' ) {
+				return virtualAnchor.getBoundingClientRect();
+			}
+			// Ultimate fallback to prevent crash
+			return new window.DOMRect();
+		},
+		ownerDocument: contentRef?.current?.ownerDocument || document,
+	};
 
 	return (
-		<TokenPopover
-			anchor={ effectiveAnchor }
-			getFallbackAnchor={ () => frozenInsertRect }
-			editExpr={ editExpr }
-			setEdit={ setEdit }
-			previewObj={ livePreview }
-			onUpdate={ applyUpdate }
-			onRemove={ applyRemove }
-			onDismiss={ dismissPopover }
-			inputRef={ inputRef }
-		/>
+		<>
+			{ NativeToolbarButton }
+			<TokenPopover
+				anchor={ dynamicAnchor }
+				editExpr={ editExpr }
+				setEdit={ setEdit }
+				previewObj={ livePreview }
+				onUpdate={ applyUpdate }
+				onRemove={ applyRemove }
+				onDismiss={ dismissPopover }
+				inputRef={ inputRef }
+			/>
+		</>
 	);
 };
 
@@ -780,7 +698,7 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 export const registerExpressionFormat = () => {
 	registerFormatType( 'vector/expression', {
 		title:     __( 'Dynamic Value', 'vector-expressions' ),
-		tagName:   'mark',
+		tagName:   'span',
 		className: 've-expr-token',
 		attributes: {
 			expr:            'data-ve-expr',
@@ -791,7 +709,7 @@ export const registerExpressionFormat = () => {
 			contentEditable: 'contenteditable',
 		},
 
-		interactive: true,
+
 		__unstableInputRule( value ) {
 			const { start, text } = value;
 			const { applyFormat } = window.wp.richText;

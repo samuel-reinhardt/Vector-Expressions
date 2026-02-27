@@ -80,4 +80,12 @@ All expressions are evaluated server-side in PHP during the `render_block` filte
 == Changelog ==
 
 = 1.0.0 =
-* Initial release on WordPress.org repository.
+* Added: Vector Expressions block format added to the Rich Text toolbar.
+* Added: Expression pill editing popover with syntax highlighting.
+* Added: Server-side parsing and evaluation engine for expressions.
+* Added: Logic panel in block inspector for visibility and class expressions.
+* Added: Live preview evaluation via REST APIs.
+* Changed: Expression pill HTML tag changed from `<mark>` to `<span>`.
+* Fixed: Expression format now appears in core Button blocks and other blocks using `withoutInteractiveFormatting`. Removed `interactive: true` from format registration.
+* Fixed: Pressing Escape while editing an expression in the popover now reliably closes it.
+* Fixed: Custom `vector/button` block now allows all registered rich-text formats (was `allowedFormats={[]}`).

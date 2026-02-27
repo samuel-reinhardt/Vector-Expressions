@@ -5,9 +5,11 @@
  * two-phase `{{ expr }}` token conversion:
  *
  *   Pass 1 — Synchronous: intercepts `setAttributes` to convert `{{ expr }}`
- *             to `<mark>` pills before the update reaches the block store.
- *   Pass 2 — Async: fetches live previews from the REST API and writes the
- *             resolved text into each mark's `data-ve-view` attribute.
+ *             to `<span>` pills before the update reaches the block store.
+ *   Pass 2 — Async:
+ *      The hook parses the raw block HTML to find un-evaluated `<span>` pills
+ *      and issues a batch REST API request to evaluate them. It injects the
+ *      resolved text into each span's `data-ve-view` attribute.
  */
 
 import { fetchPreview }                              from './api.js';
@@ -43,9 +45,9 @@ const getRichTextAttrName = ( blockName ) => {
 };
 
 /**
- * Replaces bare `{{ expr }}` occurrences in an HTML string with
- * `<mark class="ve-expr-token">` pills, skipping already-converted marks
- * and `<code>`/`<pre>` blocks.
+ * Parses `{{ expression }}` logic in the Raw text mode and converts them into
+ * `<span class="ve-expr-token">` pills, skipping already-converted spans
+ * and speculative spans.
  *
  * @param {string} html Raw attribute HTML.
  * @returns {string} Converted HTML (same reference if nothing changed).
@@ -55,15 +57,15 @@ const convertTokens = ( html ) => {
 	TOKEN_REGEX.lastIndex = 0;
 	return html.replace(
 		TOKEN_REGEX,
-		( match, existingMark, codeBlock, _fullExpr, expr ) => {
+		( match, existingSpan, codeBlock, _fullExpr, expr ) => {
 			if ( codeBlock ) return codeBlock;
 
-			// THE FIX: Aggressively re-inject the speculative flag into existing marks before saving.
-			if ( existingMark ) {
-				if ( ! existingMark.includes( 'data-ve-speculative' ) ) {
-					return existingMark.replace( '<mark ', '<mark data-ve-speculative="true" ' );
+			// In Text mode, simply flag the existing span as speculative to render the placeholder
+			if ( existingSpan && existingSpan.startsWith( '<span ' ) ) {
+				if ( ! existingSpan.includes( 'data-ve-speculative' ) ) {
+					return existingSpan.replace( '<span ', '<span data-ve-speculative="true" ' );
 				}
-				return existingMark;
+				return existingSpan;
 			}
 
 			const e        = expr.trim().replace( /\s*\|\s*/g, ' | ' );
@@ -72,8 +74,7 @@ const convertTokens = ( html ) => {
 			const safeExpr = e.replace( /"/g, '&quot;' );
 			const safeView = view.replace( /"/g, '&quot;' );
 
-			// ADD data-ve-speculative="true"
-			return `<mark class="ve-expr-token" data-ve-expr="${ safeExpr }" data-ve-view="${ safeView }" data-ve-speculative="true" contenteditable="false">{{ ${ e } }}</mark>`;
+			return `<span class="ve-expr-token" data-ve-expr="${ safeExpr }" data-ve-view="${ safeView }" data-ve-speculative="true" contenteditable="false">{{ ${ e } }}</span>`;
 		},
 	);
 };
@@ -154,18 +155,18 @@ const usePass2Resolution = ( attributes, attrName, blockName, postId ) => {
 
 		const parser = new DOMParser();
 		const doc    = parser.parseFromString( html, 'text/html' );
-		const marks  = Array.from( doc.querySelectorAll( 'mark.ve-expr-token' ) );
+		const spans  = Array.from( doc.querySelectorAll( 'span.ve-expr-token' ) );
 
-		const toFetch = marks.reduce( ( acc, mark ) => {
-			const expr          = mark.dataset.veExpr;
-			const view          = mark.dataset.veView;
+		const toFetch = spans.reduce( ( acc, span ) => {
+			const expr          = span.dataset.veExpr;
+			const view          = span.dataset.veView;
 			if ( ! expr ) return acc;
 
 			// Check for the speculative flag
-			const isSpeculative = mark.hasAttribute( 'data-ve-speculative' );
+			const isSpeculative = span.hasAttribute( 'data-ve-speculative' );
 			const unresolved    = ! view || view.trim() === expr.trim() || isSpeculative;
 
-			if ( isForced || unresolved ) acc.push( { expr, mark } );
+			if ( isForced || unresolved ) acc.push( { expr, span } );
 			return acc;
 		}, [] );
 
@@ -202,21 +203,21 @@ const usePass2Resolution = ( attributes, attrName, blockName, postId ) => {
 		if ( typeof raw === 'string' && raw.includes( 've-expr-token' ) ) {
 			const doc = new DOMParser().parseFromString( raw, 'text/html' );
 			let changed = false;
-			Array.from( doc.querySelectorAll( 'mark.ve-expr-token' ) ).forEach( ( mark ) => {
-				const expr = mark.dataset.veExpr;
-				if ( mark.hasAttribute( 'data-ve-speculative' ) ) {
-					mark.removeAttribute( 'data-ve-speculative' );
+			Array.from( doc.querySelectorAll( 'span.ve-expr-token' ) ).forEach( ( span ) => {
+				const expr = span.dataset.veExpr;
+				if ( span.hasAttribute( 'data-ve-speculative' ) ) {
+					span.removeAttribute( 'data-ve-speculative' );
 					changed = true;
 				}
 				if ( localViews.current.has( expr ) ) {
 					const p = localViews.current.get( expr );
-					if ( p !== null && p !== undefined && p !== mark.dataset.veView ) {
+					if ( p !== null && p !== undefined && p !== span.dataset.veView ) {
 						const hasVisibleContent = /\S/.test( p.replace( /\u00a0/g, '' ) );
-						mark.dataset.veView = p ?? '';
+						span.dataset.veView = p ?? '';
 						if ( hasVisibleContent ) {
-							delete mark.dataset.veEmpty;
+							delete span.dataset.veEmpty;
 						} else {
-							mark.dataset.veEmpty = '';
+							span.dataset.veEmpty = '';
 						}
 						changed = true;
 					}

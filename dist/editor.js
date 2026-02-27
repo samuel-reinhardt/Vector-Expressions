@@ -480,57 +480,45 @@
     useAnchor
   } = window.wp.richText;
   var { select } = window.wp.data;
-  var useActiveTokenState = (isActive, contentRef) => {
+  var { RichTextToolbarButton } = window.wp.blockEditor;
+  var useActiveTokenState = (isActive, contentRef, popoverOpen) => {
     useEffect(() => {
       const el2 = contentRef == null ? void 0 : contentRef.current;
       if (!el2) return;
       if (isActive) {
-        const mark = el2.querySelector("mark.ve-expr-token[data-rich-text-format-boundary]");
-        if (mark) mark.setAttribute("data-ve-active", "");
-      } else {
-        el2.querySelectorAll("mark.ve-expr-token").forEach((m) => {
+        const span = el2.querySelector("span.ve-expr-token[data-rich-text-format-boundary]");
+        if (span) span.setAttribute("data-ve-active", "");
+      } else if (!popoverOpen) {
+        el2.querySelectorAll("span.ve-expr-token").forEach((m) => {
           m.removeAttribute("data-ve-active");
           m.removeAttribute("data-rich-text-format-boundary");
         });
       }
-    }, [isActive, contentRef]);
-    useEffect(() => {
-      const el2 = contentRef == null ? void 0 : contentRef.current;
-      if (!el2) return;
-      const onFocusOut = (evt) => {
-        if (el2.contains(evt.relatedTarget)) return;
-        el2.querySelectorAll("mark.ve-expr-token").forEach((m) => {
-          m.removeAttribute("data-ve-active");
-          m.removeAttribute("data-rich-text-format-boundary");
-        });
-      };
-      el2.addEventListener("focusout", onFocusOut);
-      return () => el2.removeEventListener("focusout", onFocusOut);
-    }, [contentRef == null ? void 0 : contentRef.current]);
+    }, [isActive, contentRef, popoverOpen]);
   };
-  var getTokenMark = (n, el2) => {
+  var getTokenSpan = (n, el2) => {
     let cur = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
     while (cur && cur !== el2) {
-      if (cur.tagName === "MARK" && cur.classList.contains("ve-expr-token")) return cur;
+      if (cur.tagName === "SPAN" && cur.classList.contains("ve-expr-token")) return cur;
       cur = cur.parentElement;
     }
     return null;
   };
-  var placeCursorAdjacentToMark = (sel, doc, mark, side) => {
+  var placeCursorAdjacentToSpan = (sel, doc, span, side) => {
     const range = doc.createRange();
-    if (side === "before") range.setStartBefore(mark);
-    else range.setStartAfter(mark);
+    if (side === "before") range.setStartBefore(span);
+    else range.setStartAfter(span);
     range.collapse(true);
     sel.removeAllRanges();
     sel.addRange(range);
   };
   var useTokenEventListeners = (contentRef, refs) => {
     useEffect(() => {
-      const el2 = contentRef == null ? void 0 : contentRef.current;
-      if (!el2) return;
-      const doc = el2.ownerDocument || document;
+      let interval = null;
+      let el2 = null;
       const onKeyDown = (evt) => {
-        var _a2, _b2, _c2, _d2;
+        var _a2, _b2;
+        if (!el2) return;
         const { key } = evt;
         if (key === "Escape" && refs.popoverOpenRef.current) {
           evt.preventDefault();
@@ -538,9 +526,8 @@
           (_b2 = (_a2 = refs.dismissPopoverRef).current) == null ? void 0 : _b2.call(_a2);
           return;
         }
-        if (!el2.contains(evt.target)) return;
         if (key === "Tab") {
-          const listbox = doc.querySelector('[role="listbox"].components-autocomplete__results');
+          const listbox = el2.ownerDocument.querySelector('[role="listbox"].components-autocomplete__results');
           if (listbox) {
             const selected = listbox.querySelector('[aria-selected="true"]');
             if (selected) {
@@ -551,64 +538,60 @@
             return;
           }
         }
-        const iframeWin = el2.ownerDocument.defaultView;
+        const iframeDoc = el2.ownerDocument;
+        const iframeWin = iframeDoc.defaultView;
         const sel = iframeWin.getSelection();
         if (!sel || !sel.rangeCount) return;
         const range = sel.getRangeAt(0);
         const node = range.startContainer;
         if (key === "ArrowLeft" || key === "ArrowRight") {
-          const mark = getTokenMark(node, el2);
-          if (mark) {
+          const span = getTokenSpan(node, el2);
+          if (span) {
             evt.preventDefault();
             evt.stopPropagation();
-            placeCursorAdjacentToMark(sel, doc, mark, key === "ArrowLeft" ? "before" : "after");
+            placeCursorAdjacentToSpan(sel, iframeDoc, span, key === "ArrowLeft" ? "before" : "after");
           }
         }
         if (key === "Enter" || key === " ") {
           if (refs.isActiveRef.current) {
-            const inside = getTokenMark(node, el2);
+            const inside = getTokenSpan(node, el2);
             if (inside || !range.collapsed) {
               evt.preventDefault();
               evt.stopPropagation();
-              const markEl = inside || refs.anchorRef.current;
-              refs.activeMarkRef.current = markEl;
-              refs.anchorRef.current = markEl;
-              (_d2 = (_c2 = refs.setAnchorRef).current) == null ? void 0 : _d2.call(_c2, markEl);
               refs.setPopoverOpenRef.current(true);
             }
             return;
           }
         }
         if (refs.isActiveRef.current && !refs.popoverOpenRef.current && key.length === 1 && !evt.ctrlKey && !evt.metaKey) {
-          const mark = getTokenMark(node, el2);
-          if (mark) {
-            const isStart = (node.nodeType === Node.TEXT_NODE || node === mark) && range.startOffset === 0;
-            placeCursorAdjacentToMark(sel, doc, mark, isStart ? "before" : "after");
+          const span = getTokenSpan(node, el2);
+          if (span) {
+            const isStart = (node.nodeType === Node.TEXT_NODE || node === span) && range.startOffset === 0;
+            placeCursorAdjacentToSpan(sel, iframeDoc, span, isStart ? "before" : "after");
           }
         }
       };
-      const onClickToken = (evt) => {
-        var _a2, _b2;
-        if (!el2.contains(evt.target) || evt.target.tagName !== "MARK" || !evt.target.classList.contains("ve-expr-token")) return;
-        const iframeDoc = el2.ownerDocument;
-        const iframeWin = iframeDoc.defaultView;
-        const range = iframeDoc.createRange();
-        range.setStartBefore(evt.target);
-        range.collapse(true);
-        iframeWin.getSelection().removeAllRanges();
-        iframeWin.getSelection().addRange(range);
-        refs.activeMarkRef.current = evt.target;
-        refs.anchorRef.current = evt.target;
-        (_b2 = (_a2 = refs.setAnchorRef).current) == null ? void 0 : _b2.call(_a2, evt.target);
-        refs.setPopoverOpenRef.current(true);
+      const tryAttach = () => {
+        if (el2) return true;
+        if (contentRef.current) {
+          el2 = contentRef.current;
+          el2.addEventListener("keydown", onKeyDown, true);
+          return true;
+        }
+        return false;
       };
-      doc.addEventListener("keydown", onKeyDown, true);
-      doc.addEventListener("click", onClickToken, true);
+      if (!tryAttach()) {
+        interval = setInterval(() => {
+          if (tryAttach()) clearInterval(interval);
+        }, 100);
+      }
       return () => {
-        doc.removeEventListener("keydown", onKeyDown, true);
-        doc.removeEventListener("click", onClickToken, true);
+        if (interval) clearInterval(interval);
+        if (el2) {
+          el2.removeEventListener("keydown", onKeyDown, true);
+        }
       };
-    }, [contentRef]);
+    }, []);
   };
   var VE_PATTERNS = [
     { expr: "post.title | default 'Untitled'", label: "Post title with fallback" },
@@ -760,6 +743,12 @@
         placeholder: "user.is_logged_in",
         inputRef,
         onKeyDown: async (e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            onDismiss();
+            return;
+          }
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             await onUpdate();
@@ -815,113 +804,47 @@
       __("Apply", "vector-expressions")
     )))
   );
-  var getViewportCorrectedRect = () => {
-    const iframe = document.querySelector('iframe[name="editor-canvas"]');
-    const win = iframe ? iframe.contentWindow : window;
-    const sel = win == null ? void 0 : win.getSelection();
-    if (!(sel == null ? void 0 : sel.rangeCount)) return null;
-    const selRect = sel.getRangeAt(0).getBoundingClientRect();
-    const iframeRect = iframe ? iframe.getBoundingClientRect() : { top: 0, left: 0 };
-    const top = selRect.top + iframeRect.top;
-    const left = selRect.left + iframeRect.left;
-    const bottom = selRect.bottom + iframeRect.top;
-    const right = selRect.right + iframeRect.left;
-    return {
-      top,
-      left,
-      bottom,
-      right,
-      width: selRect.width,
-      height: selRect.height,
-      x: left,
-      y: top,
-      toJSON() {
-        return this;
-      }
-    };
-  };
   var ExpressionEdit = ({ isActive, activeAttributes, value, onChange, contentRef }) => {
+    var _a2;
     const [editExpr, setEdit] = useState("");
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [livePreview, setLivePreview] = useState(null);
-    const [frozenInsertRect, setFrozenInsertRect] = useState(null);
     const inputRef = useRef2(null);
     const isActiveRef = useRef2(false);
-    const anchorRef = useRef2(null);
-    const activeMarkRef = useRef2(null);
     const popoverOpenRef = useRef2(false);
     const dismissPopoverRef = useRef2(null);
     const setPopoverOpenRef = useRef2(null);
-    setPopoverOpenRef.current = (open) => {
-      if (open && !anchorRef.current) {
-        setFrozenInsertRect(getViewportCorrectedRect());
-      } else if (!open) {
-        setFrozenInsertRect(null);
-      }
-      setPopoverOpen(open);
-    };
+    setPopoverOpenRef.current = setPopoverOpen;
     popoverOpenRef.current = popoverOpen;
-    const [anchor, setAnchor] = useState(null);
-    useEffect(() => {
-      if (isActive) {
-        const timer = setTimeout(() => {
-          var _a2, _b2;
-          const iframe = document.querySelector('iframe[name="editor-canvas"]');
-          const doc = iframe ? iframe.contentDocument : document;
-          const win = iframe ? iframe.contentWindow : window;
-          if (!doc || !win) return;
-          const selection = win.getSelection();
-          if (selection && selection.rangeCount > 0) {
-            let pointerNode = selection.getRangeAt(0).startContainer;
-            if (pointerNode.nodeType === 3) {
-              pointerNode = pointerNode.parentNode;
-            }
-            let activeNode = (pointerNode == null ? void 0 : pointerNode.closest(".ve-expr-token")) || null;
-            if (!activeNode && popoverOpenRef.current && ((_a2 = activeMarkRef.current) == null ? void 0 : _a2.isConnected)) {
-              activeNode = activeMarkRef.current;
-            }
-            setAnchor(activeNode);
-          } else {
-            if (popoverOpenRef.current && ((_b2 = activeMarkRef.current) == null ? void 0 : _b2.isConnected)) {
-              setAnchor(activeMarkRef.current);
-            } else {
-              setAnchor(null);
-            }
-          }
-        }, 10);
-        return () => clearTimeout(timer);
-      } else {
-        setAnchor(null);
-      }
-    }, [isActive, value]);
+    const virtualAnchor = useAnchor({
+      editableContentElement: contentRef.current,
+      settings: { tagName: "span", className: "ve-expr-token" }
+    });
     useLayoutEffect2(() => {
       isActiveRef.current = isActive;
     }, [isActive]);
-    useLayoutEffect2(() => {
-      anchorRef.current = anchor;
-    }, [anchor]);
-    useActiveTokenState(isActive, contentRef);
-    const setAnchorRef = useRef2(null);
-    setAnchorRef.current = setAnchor;
+    useActiveTokenState(isActive, contentRef, popoverOpen);
     useTokenEventListeners(contentRef, {
       isActiveRef,
       popoverOpenRef,
-      anchorRef,
-      activeMarkRef,
       dismissPopoverRef,
-      setPopoverOpenRef,
-      setAnchorRef
+      setPopoverOpenRef
     });
     useEffect(() => {
-      var _a2;
+      if (isActive && !popoverOpen) {
+        setPopoverOpen(true);
+      }
+    }, [isActive]);
+    useEffect(() => {
+      var _a3;
       if (isActive && (activeAttributes == null ? void 0 : activeAttributes.expr)) {
         setEdit(activeAttributes.expr);
         setLivePreview({
-          preview: (_a2 = activeAttributes.view) != null ? _a2 : null,
+          preview: (_a3 = activeAttributes.view) != null ? _a3 : null,
           valid: activeAttributes.valid !== "false"
         });
       }
-    }, [isActive, activeAttributes == null ? void 0 : activeAttributes.expr, activeAttributes == null ? void 0 : activeAttributes.view, activeAttributes == null ? void 0 : activeAttributes.valid]);
+    }, [isActive, popoverOpen, activeAttributes == null ? void 0 : activeAttributes.expr, activeAttributes == null ? void 0 : activeAttributes.view, activeAttributes == null ? void 0 : activeAttributes.valid]);
     useEffect(() => {
       if (!isActive || !editExpr.trim()) {
         if (!editExpr.trim()) setLivePreview(null);
@@ -929,8 +852,8 @@
       }
       let isCancelled = false;
       const id = setTimeout(async () => {
-        var _a2, _b2;
-        const postId = ((_b2 = (_a2 = select("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
+        var _a3, _b2;
+        const postId = ((_b2 = (_a3 = select("core/editor")) == null ? void 0 : _a3.getCurrentPostId) == null ? void 0 : _b2.call(_a3)) || 0;
         const view = await fetchPreview(editExpr.trim(), postId);
         if (!isCancelled) {
           setLivePreview(view);
@@ -947,16 +870,16 @@
     useEffect(() => {
       if (!popoverOpen || !inputRef.current) return;
       const id = setTimeout(() => {
-        var _a2;
-        return (_a2 = inputRef.current) == null ? void 0 : _a2.focus();
+        var _a3;
+        return (_a3 = inputRef.current) == null ? void 0 : _a3.focus();
       }, POPOVER_FOCUS_DELAY);
       return () => clearTimeout(id);
     }, [popoverOpen]);
     const applyUpdate = useCallback2(async () => {
-      var _a2, _b2;
+      var _a3, _b2;
       const expr = editExpr.trim();
       if (!expr) return;
-      const postId = ((_b2 = (_a2 = select("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
+      const postId = ((_b2 = (_a3 = select("core/editor")) == null ? void 0 : _a3.getCurrentPostId) == null ? void 0 : _b2.call(_a3)) || 0;
       const view = await fetchPreview(expr, postId);
       const next = applyFormat(value, {
         type: "vector/expression",
@@ -966,12 +889,12 @@
       onChange(next);
     }, [editExpr, value, onChange]);
     const applyRemove = useCallback2(() => {
-      var _a2;
-      const formats = (_a2 = value.formats) != null ? _a2 : [];
+      var _a3;
+      const formats = (_a3 = value.formats) != null ? _a3 : [];
       let pivot = value.start;
       const hasFormat = (i) => {
-        var _a3;
-        return (_a3 = formats[i]) == null ? void 0 : _a3.some((f) => f.type === "vector/expression");
+        var _a4;
+        return (_a4 = formats[i]) == null ? void 0 : _a4.some((f) => f.type === "vector/expression");
       };
       if (pivot > 0 && !hasFormat(pivot) && hasFormat(pivot - 1)) pivot--;
       if (!hasFormat(pivot)) {
@@ -986,13 +909,12 @@
     }, [value, onChange]);
     const dismissPopover = useCallback2(() => {
       setPopoverOpen(false);
-      setFrozenInsertRect(null);
       const el2 = contentRef == null ? void 0 : contentRef.current;
-      const mark = activeMarkRef.current;
-      if (el2 && mark) {
+      const span = el2 == null ? void 0 : el2.querySelector("span[data-ve-active]");
+      if (el2 && span) {
         const iframeDoc = el2.ownerDocument;
         const range = iframeDoc.createRange();
-        range.setStartBefore(mark);
+        range.setStartAfter(span);
         range.collapse(true);
         const sel = iframeDoc.defaultView.getSelection();
         sel.removeAllRanges();
@@ -1000,14 +922,34 @@
       }
       el2 == null ? void 0 : el2.focus();
     }, [contentRef]);
-    dismissPopoverRef.current = dismissPopover;
-    if (!popoverOpen) return null;
-    const effectiveAnchor = anchor ? anchor : frozenInsertRect ? { getBoundingClientRect: () => frozenInsertRect } : null;
-    return /* @__PURE__ */ wp.element.createElement(
+    const NativeToolbarButton = /* @__PURE__ */ wp.element.createElement(
+      RichTextToolbarButton,
+      {
+        icon: () => /* @__PURE__ */ wp.element.createElement(Icon, { icon: "database" }),
+        title: __("Edit Vector Expression", "vector-expressions"),
+        onClick: () => setPopoverOpen(true),
+        isActive
+      }
+    );
+    if (!popoverOpen) return NativeToolbarButton;
+    const dynamicAnchor = {
+      getBoundingClientRect: () => {
+        var _a3;
+        const activeSpan = (_a3 = contentRef == null ? void 0 : contentRef.current) == null ? void 0 : _a3.querySelector("span[data-ve-active]");
+        if (activeSpan) {
+          return activeSpan.getBoundingClientRect();
+        }
+        if (virtualAnchor && typeof virtualAnchor.getBoundingClientRect === "function") {
+          return virtualAnchor.getBoundingClientRect();
+        }
+        return new window.DOMRect();
+      },
+      ownerDocument: ((_a2 = contentRef == null ? void 0 : contentRef.current) == null ? void 0 : _a2.ownerDocument) || document
+    };
+    return /* @__PURE__ */ wp.element.createElement(wp.element.Fragment, null, NativeToolbarButton, /* @__PURE__ */ wp.element.createElement(
       TokenPopover,
       {
-        anchor: effectiveAnchor,
-        getFallbackAnchor: () => frozenInsertRect,
+        anchor: dynamicAnchor,
         editExpr,
         setEdit,
         previewObj: livePreview,
@@ -1016,12 +958,12 @@
         onDismiss: dismissPopover,
         inputRef
       }
-    );
+    ));
   };
   var registerExpressionFormat = () => {
     registerFormatType("vector/expression", {
       title: __("Dynamic Value", "vector-expressions"),
-      tagName: "mark",
+      tagName: "span",
       className: "ve-expr-token",
       attributes: {
         expr: "data-ve-expr",
@@ -1031,7 +973,6 @@
         active: "data-ve-active",
         contentEditable: "contenteditable"
       },
-      interactive: true,
       __unstableInputRule(value) {
         const { start, text } = value;
         const { applyFormat: applyFormat2 } = window.wp.richText;
@@ -1222,20 +1163,20 @@
     TOKEN_REGEX.lastIndex = 0;
     return html.replace(
       TOKEN_REGEX,
-      (match, existingMark, codeBlock, _fullExpr, expr) => {
+      (match, existingSpan, codeBlock, _fullExpr, expr) => {
         if (codeBlock) return codeBlock;
-        if (existingMark) {
-          if (!existingMark.includes("data-ve-speculative")) {
-            return existingMark.replace("<mark ", '<mark data-ve-speculative="true" ');
+        if (existingSpan && existingSpan.startsWith("<span ")) {
+          if (!existingSpan.includes("data-ve-speculative")) {
+            return existingSpan.replace("<span ", '<span data-ve-speculative="true" ');
           }
-          return existingMark;
+          return existingSpan;
         }
         const e = expr.trim().replace(/\s*\|\s*/g, " | ");
         const opt = getCompletions().find((o) => o.expr === e);
         const view = (opt == null ? void 0 : opt.preview) || e;
         const safeExpr = e.replace(/"/g, "&quot;");
         const safeView = view.replace(/"/g, "&quot;");
-        return `<mark class="ve-expr-token" data-ve-expr="${safeExpr}" data-ve-view="${safeView}" data-ve-speculative="true" contenteditable="false">{{ ${e} }}</mark>`;
+        return `<span class="ve-expr-token" data-ve-expr="${safeExpr}" data-ve-view="${safeView}" data-ve-speculative="true" contenteditable="false">{{ ${e} }}</span>`;
       }
     );
   };
@@ -1283,14 +1224,14 @@
       prevRefreshTick.current = refreshTick;
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, "text/html");
-      const marks = Array.from(doc.querySelectorAll("mark.ve-expr-token"));
-      const toFetch = marks.reduce((acc, mark) => {
-        const expr = mark.dataset.veExpr;
-        const view = mark.dataset.veView;
+      const spans = Array.from(doc.querySelectorAll("span.ve-expr-token"));
+      const toFetch = spans.reduce((acc, span) => {
+        const expr = span.dataset.veExpr;
+        const view = span.dataset.veView;
         if (!expr) return acc;
-        const isSpeculative = mark.hasAttribute("data-ve-speculative");
+        const isSpeculative = span.hasAttribute("data-ve-speculative");
         const unresolved = !view || view.trim() === expr.trim() || isSpeculative;
-        if (isForced || unresolved) acc.push({ expr, mark });
+        if (isForced || unresolved) acc.push({ expr, span });
         return acc;
       }, []);
       if (toFetch.length === 0) return;
@@ -1321,21 +1262,21 @@
       if (typeof raw === "string" && raw.includes("ve-expr-token")) {
         const doc = new DOMParser().parseFromString(raw, "text/html");
         let changed = false;
-        Array.from(doc.querySelectorAll("mark.ve-expr-token")).forEach((mark) => {
-          const expr = mark.dataset.veExpr;
-          if (mark.hasAttribute("data-ve-speculative")) {
-            mark.removeAttribute("data-ve-speculative");
+        Array.from(doc.querySelectorAll("span.ve-expr-token")).forEach((span) => {
+          const expr = span.dataset.veExpr;
+          if (span.hasAttribute("data-ve-speculative")) {
+            span.removeAttribute("data-ve-speculative");
             changed = true;
           }
           if (localViews.current.has(expr)) {
             const p = localViews.current.get(expr);
-            if (p !== null && p !== void 0 && p !== mark.dataset.veView) {
+            if (p !== null && p !== void 0 && p !== span.dataset.veView) {
               const hasVisibleContent = /\S/.test(p.replace(/\u00a0/g, ""));
-              mark.dataset.veView = p != null ? p : "";
+              span.dataset.veView = p != null ? p : "";
               if (hasVisibleContent) {
-                delete mark.dataset.veEmpty;
+                delete span.dataset.veEmpty;
               } else {
-                mark.dataset.veEmpty = "";
+                span.dataset.veEmpty = "";
               }
               changed = true;
             }

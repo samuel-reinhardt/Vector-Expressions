@@ -7,11 +7,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+## [1.0.0] - 2025-02-24
 
----
+### Added
 
-## [1.0.0] - 2026-02-19
+- Vector Expressions block format added to the Rich Text toolbar.
+- Expression pill editing popover with syntax highlighting.
+- Server-side parsing and evaluation engine for expressions.
+- Logic panel in block inspector for visibility and class expressions.
+- Live preview evaluation via REST APIs.
+
+### Changed
+
+- Changed the core expression pill HTML tag from `<mark>` to `<span>`.
+
+### Fixed
+
+- Expression format now appears in core Button blocks and other blocks using `withoutInteractiveFormatting`. Removed `interactive: true` from format registration.
+- Pressing Escape while editing an expression in the popover now reliably closes it.
+- Custom `vector/button` block now allows all registered rich-text formats (was `allowedFormats={[]}`).
+- `render_block_logic`: `attrs` is now always initialized as an empty array and guarded with `is_array()` before iteration.
 
 ### Features
 

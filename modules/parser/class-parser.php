@@ -89,10 +89,10 @@ class Parser {
 			);
 		}
 
-		// ---- Step 2b: Process HTML format pills (<mark data-ve-expr="...">preview</mark>) ------
+		// ---- Step 2b: Process HTML format pills (<span data-ve-expr="...">preview</span>) ------
 		if ( str_contains( $template, 'data-ve-expr' ) ) {
 			$template = preg_replace_callback(
-				'/<mark\b[^>]*\bdata-ve-expr="([^"]+)"[^>]*>.*?<\/mark>/is',
+				'/<span\b[^>]*\bdata-ve-expr="([^"]+)"[^>]*>.*?<\/span>/is',
 				function ( array $m ): string {
 					$expr = html_entity_decode( $m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 					try {
