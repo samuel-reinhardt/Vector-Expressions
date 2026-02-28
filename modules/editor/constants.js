@@ -161,42 +161,42 @@ export const VE_COMPLETIONS = [
   {
     label: "Post: Content",
     expr: "post.content",
-    preview: ctx.post?.content || "",
+    preview: "",
     category: "Post",
     prefix: "post",
   },
   {
     label: "Post: ID",
     expr: "post.id",
-    preview: ctx.post?.id ? String(ctx.post.id) : "1",
+    preview: "1",
     category: "Post",
     prefix: "post",
   },
   {
     label: "Post: Slug",
     expr: "post.slug",
-    preview: ctx.post?.slug || "my-post",
+    preview: "my-post",
     category: "Post",
     prefix: "post",
   },
   {
     label: "Post: Status",
     expr: "post.status",
-    preview: ctx.post?.status || "publish",
+    preview: "publish",
     category: "Post",
     prefix: "post",
   },
   {
     label: "Post: Type",
     expr: "post.type",
-    preview: ctx.post?.type || "post",
+    preview: "post",
     category: "Post",
     prefix: "post",
   },
   {
     label: "Post: Published Date",
     expr: "post.date | date",
-    preview: ctx.post?.date || "January 1, 2024",
+    preview: "January 1, 2024",
     category: "Post",
     prefix: "post",
   },
@@ -210,7 +210,7 @@ export const VE_COMPLETIONS = [
   {
     label: "Post: Author Name",
     expr: "post.author_name",
-    preview: ctx.post?.author_name || "Author",
+    preview: "Author",
     category: "Post",
     prefix: "post",
   },
@@ -224,7 +224,7 @@ export const VE_COMPLETIONS = [
   {
     label: "Post: URL",
     expr: "post.url",
-    preview: ctx.post?.url || "",
+    preview: "",
     category: "Post",
     prefix: "post",
   },
@@ -446,13 +446,13 @@ export const SKIP_CONVERT_BLOCKS = new Set([
 
 /**
  * Matches:
- *   Group 1 — An already-converted <mark class="ve-expr-token"> element (skip).
+ *   Group 1 — An already-converted <span class="ve-expr-token"> element (skip).
  *   Group 2 — A <code> or <pre> block (skip).
  *   Group 3 — A bare {{ expr }} template tag (convert).
  *   Group 4 — The expression inside the {{ }} (capture group within 3).
  */
 export const TOKEN_REGEX =
-  /(<mark\b[^>]*\bclass="ve-expr-token"[^>]*>[\s\S]*?<\/mark>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
+  /(<span\b[^>]*\bclass="ve-expr-token"[^>]*>[\s\S]*?<\/span>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
 
 /** Milliseconds to wait before auto-focusing the popover expression input. */
 export const POPOVER_FOCUS_DELAY = 50;

@@ -5,7 +5,8 @@
  * popover UI that lets users view, edit, and remove expression tokens.
  */
 
-import { fetchPreview }       from './api.js';
+import { fetchPreview }        from './api.js';
+import { getCachedView }       from './hydrator.js';
 import { POPOVER_FOCUS_DELAY, getCompletions, VE_ROOTS } from './constants.js';
 import { AutoTextarea }       from './auto-textarea.jsx';
 
@@ -421,7 +422,7 @@ const TokenPopover = ( { anchor, getFallbackAnchor, editExpr, setEdit, onUpdate,
 					onChange={ ( val ) => setEdit( val ) }
 					placeholder="user.is_logged_in"
 					inputRef={ inputRef }
-					onKeyDown={ async ( e ) => {
+					onKeyDown={ ( e ) => {
 						if ( e.key === 'Escape' ) {
 							e.preventDefault();
 							e.stopPropagation();
@@ -430,7 +431,7 @@ const TokenPopover = ( { anchor, getFallbackAnchor, editExpr, setEdit, onUpdate,
 						}
 						if ( e.key === 'Enter' && ! e.shiftKey ) {
 							e.preventDefault();
-							await onUpdate();
+							onUpdate();
 							onDismiss();
 						}
 					} }
@@ -483,7 +484,7 @@ const TokenPopover = ( { anchor, getFallbackAnchor, editExpr, setEdit, onUpdate,
 				</Button>
 				<Button 
 					variant="primary" 
-					onClick={ async () => { await onUpdate(); onDismiss(); } }
+					onClick={ () => { onUpdate(); onDismiss(); } }
 				>
 					{ __( 'Apply', 'vector-expressions' ) }
 				</Button>
@@ -551,12 +552,8 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 	useEffect( () => {
 		if ( isActive && activeAttributes?.expr ) {
 			setEdit( activeAttributes.expr );
-			setLivePreview( { 
-				preview: activeAttributes.view ?? null, 
-				valid: activeAttributes.valid !== 'false' 
-			} );
 		}
-	}, [ isActive, popoverOpen, activeAttributes?.expr, activeAttributes?.view, activeAttributes?.valid ] );
+	}, [ isActive, popoverOpen, activeAttributes?.expr ] );
 
 	// Debounced real-time preview computation
 	useEffect( () => {
@@ -590,17 +587,22 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 		return () => clearTimeout( id );
 	}, [ popoverOpen ] );
 
-	const applyUpdate = useCallback( async () => {
+	const applyUpdate = useCallback( () => {
 		const expr = editExpr.trim();
 		if ( ! expr ) return;
 
-		// Optimistic fetch using main page ID
-		const postId = select( 'core/editor' )?.getCurrentPostId?.() || 0;
-		const view   = await fetchPreview( expr, postId );
+		const postId = window.wp.data.select( 'core/editor' )?.getCurrentPostId?.() || 0;
+		const cached = getCachedView( expr, postId );
+		const attrs  = { expr, contentEditable: 'false' };
+
+		// Include cached view so the format data survives React re-renders.
+		if ( cached !== undefined ) {
+			attrs.view = cached;
+		}
 
 		const next   = applyFormat( value, {
 			type:       'vector/expression',
-			attributes: { expr, view: view.preview, valid: view.valid ? 'true' : 'false', speculative: 'true', contentEditable: 'false' },
+			attributes: attrs,
 		} );
 		next.start = next.end;
 		onChange( next );
@@ -703,9 +705,6 @@ export const registerExpressionFormat = () => {
 		attributes: {
 			expr:            'data-ve-expr',
 			view:            'data-ve-view',
-			speculative:     'data-ve-speculative',
-			empty:           'data-ve-empty',
-			active:          'data-ve-active',
 			contentEditable: 'contenteditable',
 		},
 

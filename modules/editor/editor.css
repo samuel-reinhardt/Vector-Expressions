@@ -229,7 +229,7 @@
 
 /*
  * Placeholder: shown when view is absent or empty (no [data-ve-view] attr).
- * Shown during initial parse before Pass-2 resolves the live value.
+ * Shown before PHP hydrate_editor_previews() injects the live value.
  */
 .ve-expr-token:not([data-ve-view])::before,
 .ve-expr-token[data-ve-view=""]::before {

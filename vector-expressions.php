@@ -116,13 +116,10 @@ final class VectorExpressions {
 			$allowed['span'] = array_merge(
 				$allowed['span'] ?? [],
 				[
-					'class'               => true,
-					'data-ve-expr'        => true,
-					'data-ve-view'        => true,
-					'data-ve-speculative' => true,
-					'data-ve-empty'       => true,
-					'data-ve-active'      => true,
-					'contenteditable'     => true,
+					'class'           => true,
+					'data-ve-expr'    => true,
+					'data-ve-view'    => true,
+					'contenteditable' => true,
 				]
 			);
 		}
@@ -297,6 +294,12 @@ final class VectorExpressions {
 			return $block_content;
 		}
 
+		// Editor context: hydrate expression spans with data-ve-view instead of
+		// running the full template parser (which would replace spans with text).
+		if ( $this->is_editor_context() ) {
+			return $this->hydrate_editor_previews( $block_content );
+		}
+
 		// Fast path: no logic or empty block.
 		if ( empty( $block['attrs']['ve_logic'] ) || '' === trim( $block_content ) ) {
 			return $this->parser->parse( $block_content );
@@ -448,6 +451,93 @@ final class VectorExpressions {
 	}
 
 	/**
+	 * Check if the current request is a Gutenberg editor render context.
+	 *
+	 * Returns true when blocks are being rendered inside the editor iframe
+	 * (admin-side AJAX or REST block preview requests), as opposed to the
+	 * public-facing frontend.
+	 *
+	 * @return bool
+	 */
+	private function is_editor_context(): bool {
+		if ( ! is_admin() && ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+			return false;
+		}
+
+		// In the editor iframe, Gutenberg renders blocks server-side via
+		// the REST API with `context=edit`. This is our primary signal.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['context'] ) && 'edit' === $_GET['context'] ) {
+			return true;
+		}
+
+		// Fallback for admin AJAX or other admin-side renders.
+		return is_admin();
+	}
+
+	/**
+	 * Hydrate expression token spans with evaluated preview values.
+	 *
+	 * Runs in the editor context instead of `parser->parse()` so that
+	 * `<span class="ve-expr-token" data-ve-expr="...">` elements are
+	 * preserved (not replaced with text), and `data-ve-view` is set
+	 * to the server-evaluated result for CSS `::before` rendering.
+	 *
+	 * Also strips stale editor-only attributes (`data-ve-speculative`,
+	 * `data-ve-empty`, `data-ve-active`) that may have been persisted
+	 * by older versions.
+	 *
+	 * @param string $html Block HTML content.
+	 * @return string Hydrated HTML with data-ve-view attributes set.
+	 */
+	private function hydrate_editor_previews( string $html ): string {
+		if ( ! str_contains( $html, 've-expr-token' ) ) {
+			return $html;
+		}
+
+		// Protect global content to prevent WYSIWYG fractals.
+		$this->parser->context->protect_global_content = true;
+
+		try {
+			$tags = new \WP_HTML_Tag_Processor( $html );
+
+			while ( $tags->next_tag( [ 'tag_name' => 'SPAN', 'class_name' => 've-expr-token' ] ) ) {
+				$expr = $tags->get_attribute( 'data-ve-expr' );
+				if ( ! $expr ) {
+					continue;
+				}
+
+				// Decode HTML entities back to raw expression text.
+				$raw_expr = html_entity_decode( $expr, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+
+				try {
+					$val  = $this->parser->evaluate_raw( $raw_expr );
+					$view = $this->parser->safe_string( $val );
+				} catch ( \Throwable $e ) {
+					$view = '';
+				}
+
+				$tags->set_attribute( 'data-ve-view', $view );
+
+				// Flag empty views so CSS can show a placeholder.
+				if ( '' === trim( str_replace( "\xC2\xA0", '', $view ) ) ) {
+					$tags->set_attribute( 'data-ve-empty', '' );
+				} else {
+					$tags->remove_attribute( 'data-ve-empty' );
+				}
+
+				// Strip stale attributes from older saves.
+				$tags->remove_attribute( 'data-ve-speculative' );
+				$tags->remove_attribute( 'data-ve-active' );
+			}
+
+			return $tags->get_updated_html();
+		} finally {
+			$this->parser->context->protect_global_content = false;
+		}
+	}
+
+	/**
 	 * Run the expression parser over post content (the_content filter).
 	 *
 	 * @param string $content Raw post content HTML.
@@ -523,36 +613,9 @@ final class VectorExpressions {
 					'url'         => home_url(),
 					'language'    => get_bloginfo( 'language' ),
 				],
-				'post'        => ( static function (): array {
-					$p = get_post();
-					if ( ! $p instanceof \WP_Post ) {
-						return [
-							'id'          => 0,
-							'title'       => '',
-							'slug'        => '',
-							'status'      => '',
-							'type'        => '',
-							'date'        => '',
-							'excerpt'     => '',
-							'content'     => '',
-							'url'         => '',
-							'author_name' => '',
-						];
-					}
-					$author = get_userdata( (int) $p->post_author );
-					return [
-						'id'          => $p->ID,
-						'title'       => $p->post_title,
-						'slug'        => $p->post_name,
-						'status'      => $p->post_status,
-						'type'        => $p->post_type,
-						'date'        => (string) wp_date( get_option( 'date_format', 'F j, Y' ), strtotime( $p->post_date ) ),
-						'excerpt'     => $p->post_excerpt,
-						'content'     => wp_strip_all_tags( $p->post_content ),
-						'url'         => get_permalink( $p ),
-						'author_name' => $author instanceof \WP_User ? $author->display_name : '',
-					];
-				} )(),
+				// Post data removed — previews are now server-rendered via
+				// hydrate_editor_previews() in the render_block filter.
+				// User/site data is still exposed for autocompleter labels.
 			]
 		);
 

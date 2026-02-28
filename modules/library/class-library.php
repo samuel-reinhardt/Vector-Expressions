@@ -327,14 +327,32 @@ class Library {
 	 * by strtotime(). Uses WordPress's locale-aware wp_date() so timezone and
 	 * translation settings are respected.
 	 *
+	 * IMPORTANT: WordPress stores `post_date` in the site's local timezone,
+	 * NOT UTC. `strtotime()` would interpret the string as UTC, then
+	 * `wp_date()` would add the site offset again — producing a wrong time.
+	 * We parse the string explicitly in the WP timezone to get the correct
+	 * UTC timestamp.
+	 *
 	 * @param mixed                    $in   Date value (timestamp or date string).
 	 * @param array<int|string, mixed> $args Args: [0] or 'format' — PHP date format. Defaults to WP date setting.
 	 * @return string Formatted date, or empty string if the value is unparseable.
 	 */
 	private function filter_date( mixed $in, array $args ): string {
-		$format    = (string) ( $args['format'] ?? $args[0] ?? get_option( 'date_format', 'F j, Y' ) );
-		$timestamp = is_numeric( $in ) ? (int) $in : strtotime( (string) $in );
-		$result    = ( false !== $timestamp ) ? wp_date( $format, $timestamp ) : false;
+		$format = (string) ( $args['format'] ?? $args[0] ?? get_option( 'date_format', 'F j, Y' ) );
+
+		if ( is_numeric( $in ) ) {
+			$timestamp = (int) $in;
+		} else {
+			// Parse the datetime string in the site's timezone so we get the
+			// correct UTC timestamp. Without this, strtotime() assumes UTC and
+			// wp_date() then applies the offset a second time.
+			$tz_str = function_exists( 'wp_timezone_string' ) ? wp_timezone_string() : date_default_timezone_get();
+			$tz     = new \DateTimeZone( $tz_str );
+			$dt     = date_create_immutable( (string) $in, $tz );
+			$timestamp = $dt ? $dt->getTimestamp() : false;
+		}
+
+		$result = ( false !== $timestamp ) ? wp_date( $format, $timestamp ) : false;
 		return is_string( $result ) ? $result : '';
 	}
 

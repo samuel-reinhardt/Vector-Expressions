@@ -14,6 +14,293 @@
     }
   };
 
+  // modules/editor/hydrator.js
+  var { select } = window.wp.data;
+  var SPAN_TAG_RE = /<span\b([^>]*\bdata-ve-expr="([^"]*)"[^>]*)>/gi;
+  var resolveFromStore = (expr, postId, postType, editorPostId) => {
+    const fail = { value: "", resolved: false };
+    const parts = expr.trim().split(".");
+    if (parts.length !== 2) return fail;
+    const [root, prop] = parts;
+    if (expr.includes("|") || expr.includes("(")) return fail;
+    switch (root) {
+      case "post":
+        return resolvePost(prop, postId, postType, editorPostId);
+      case "user":
+        return resolveUser(prop);
+      case "site":
+        return resolveSite(prop);
+      default:
+        return fail;
+    }
+  };
+  var resolvePost = (prop, postId, postType, editorPostId) => {
+    const fail = { value: "", resolved: false };
+    if (!postId || !postType) return fail;
+    const record = select("core").getEntityRecord("postType", postType, postId);
+    if (!record) return fail;
+    if ((prop === "content" || prop === "excerpt") && postId === editorPostId) {
+      return { value: "", resolved: true };
+    }
+    const map = {
+      title: () => {
+        var _a2, _b2, _c2, _d2;
+        return (_d2 = (_c2 = (_a2 = record.title) == null ? void 0 : _a2.rendered) != null ? _c2 : (_b2 = record.title) == null ? void 0 : _b2.raw) != null ? _d2 : "";
+      },
+      excerpt: () => {
+        var _a2, _b2, _c2, _d2;
+        return stripHtml((_d2 = (_c2 = (_a2 = record.excerpt) == null ? void 0 : _a2.rendered) != null ? _c2 : (_b2 = record.excerpt) == null ? void 0 : _b2.raw) != null ? _d2 : "");
+      },
+      content: () => {
+        var _a2, _b2, _c2, _d2;
+        return stripHtml((_d2 = (_c2 = (_a2 = record.content) == null ? void 0 : _a2.rendered) != null ? _c2 : (_b2 = record.content) == null ? void 0 : _b2.raw) != null ? _d2 : "");
+      },
+      date: () => {
+        var _a2;
+        return ((_a2 = record.date) != null ? _a2 : "").replace("T", " ");
+      },
+      status: () => {
+        var _a2;
+        return (_a2 = record.status) != null ? _a2 : "";
+      },
+      slug: () => {
+        var _a2;
+        return (_a2 = record.slug) != null ? _a2 : "";
+      },
+      id: () => {
+        var _a2;
+        return String((_a2 = record.id) != null ? _a2 : "");
+      },
+      type: () => {
+        var _a2;
+        return (_a2 = record.type) != null ? _a2 : "";
+      },
+      url: () => {
+        var _a2;
+        return (_a2 = record.link) != null ? _a2 : "";
+      },
+      author_name: () => {
+        var _a2;
+        const authorId = record.author;
+        if (!authorId) return "";
+        const user = select("core").getUser(authorId);
+        return (_a2 = user == null ? void 0 : user.name) != null ? _a2 : "";
+      }
+    };
+    const getter = map[prop];
+    if (!getter) return fail;
+    return { value: getter(), resolved: true };
+  };
+  var resolveUser = (prop) => {
+    const fail = { value: "", resolved: false };
+    const user = select("core").getCurrentUser();
+    if (!user) return fail;
+    const map = {
+      name: () => {
+        var _a2;
+        return (_a2 = user.name) != null ? _a2 : "";
+      },
+      email: () => {
+        var _a2;
+        return (_a2 = user.email) != null ? _a2 : "";
+      },
+      id: () => {
+        var _a2;
+        return String((_a2 = user.id) != null ? _a2 : "");
+      },
+      login: () => {
+        var _a2, _b2;
+        return (_b2 = (_a2 = user.slug) != null ? _a2 : user.username) != null ? _b2 : "";
+      },
+      url: () => {
+        var _a2, _b2;
+        return (_b2 = (_a2 = user.url) != null ? _a2 : user.link) != null ? _b2 : "";
+      },
+      is_logged_in: () => "true",
+      roles: () => {
+        var _a2;
+        return ((_a2 = user.roles) != null ? _a2 : []).join(", ");
+      }
+    };
+    const getter = map[prop];
+    if (!getter) return fail;
+    return { value: getter(), resolved: true };
+  };
+  var resolveSite = (prop) => {
+    const fail = { value: "", resolved: false };
+    const site = select("core").getEntityRecord("root", "site");
+    if (!site) return fail;
+    const map = {
+      name: () => {
+        var _a2;
+        return (_a2 = site.title) != null ? _a2 : "";
+      },
+      description: () => {
+        var _a2;
+        return (_a2 = site.description) != null ? _a2 : "";
+      },
+      url: () => {
+        var _a2;
+        return (_a2 = site.url) != null ? _a2 : "";
+      },
+      language: () => {
+        var _a2;
+        return (_a2 = site.language) != null ? _a2 : "";
+      }
+    };
+    const getter = map[prop];
+    if (!getter) return fail;
+    return { value: getter(), resolved: true };
+  };
+  var stripHtml = (html) => {
+    var _a2;
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    return (_a2 = tmp.textContent) != null ? _a2 : "";
+  };
+  var viewCache = /* @__PURE__ */ new Map();
+  var cacheKey = (expr, postId) => `${expr}::${postId}`;
+  var getCachedView = (expr, postId) => viewCache.get(cacheKey(expr, postId));
+  var useHydrateViews = (attributes, setAttributes, attrName, blockName, postId, postType, clientId) => {
+    const { useEffect: useEffect2, useRef: useRef3 } = window.wp.element;
+    const lastWritten = useRef3("");
+    useEffect2(() => {
+      var _a2, _b2;
+      if (!attrName) return;
+      const raw = attributes[attrName];
+      const html = typeof raw === "string" ? raw : String(raw != null ? raw : "");
+      if (!html.includes("ve-expr-token")) return;
+      const editorPostId = ((_b2 = (_a2 = select("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
+      const isQueryChild = postId !== editorPostId;
+      if (!isQueryChild && html === lastWritten.current) return;
+      const toFetch = /* @__PURE__ */ new Set();
+      let needsUpdate = false;
+      html.replace(SPAN_TAG_RE, (_match, tagInner, expr) => {
+        if (!expr) return;
+        if (/\bdata-ve-view="/.test(tagInner) && !isQueryChild) return;
+        const key = cacheKey(expr, postId);
+        if (!viewCache.has(key)) {
+          const result = resolveFromStore(
+            expr,
+            postId,
+            postType || "post",
+            editorPostId
+          );
+          if (result.resolved) {
+            viewCache.set(key, result.value);
+            needsUpdate = true;
+          } else {
+            toFetch.add(expr);
+          }
+        } else {
+          needsUpdate = true;
+        }
+      });
+      if (!needsUpdate && toFetch.size === 0) return;
+      if (toFetch.size === 0) {
+        if (isQueryChild) {
+          applyViewsDOM(postId, clientId);
+        } else {
+          applyViewsAttr(html, postId, attrName, setAttributes, lastWritten);
+        }
+        return;
+      }
+      let cancelled = false;
+      Promise.all(
+        [...toFetch].map(
+          (expr) => fetchPreview(expr, postId).then((r) => {
+            var _a3;
+            return {
+              expr,
+              preview: (_a3 = r == null ? void 0 : r.preview) != null ? _a3 : ""
+            };
+          })
+        )
+      ).then((results) => {
+        if (cancelled) return;
+        results.forEach(({ expr, preview }) => {
+          viewCache.set(cacheKey(expr, postId), preview);
+        });
+        if (isQueryChild) {
+          applyViewsDOM(postId, clientId);
+        } else {
+          applyViewsAttr(html, postId, attrName, setAttributes, lastWritten);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [attributes[attrName], postId]);
+    useEffect2(() => {
+      var _a2, _b2;
+      if (!attrName) return;
+      const editorPostId = ((_b2 = (_a2 = select("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
+      if (postId === editorPostId) return;
+      const root = getEditorRoot();
+      if (!root) return;
+      const scope = root.querySelector(`.post-${postId}`) || root;
+      applyViewsDOM(postId, clientId);
+      let isStamping = false;
+      const observer = new MutationObserver(() => {
+        if (isStamping) return;
+        const unstamped = scope.querySelector(
+          "span.ve-expr-token:not([data-ve-view])"
+        );
+        if (!unstamped) return;
+        isStamping = true;
+        applyViewsDOM(postId, clientId);
+        isStamping = false;
+      });
+      observer.observe(scope, { childList: true, subtree: true });
+      return () => observer.disconnect();
+    }, [postId, clientId]);
+  };
+  var applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
+    const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, expr) => {
+      if (!expr) return fullMatch;
+      if (/\bdata-ve-view="/.test(tagInner)) return fullMatch;
+      const view = viewCache.get(cacheKey(expr, postId));
+      if (view === void 0) return fullMatch;
+      const safeView = view.replace(/"/g, "&quot;");
+      const isEmpty = !view.trim().replace(/\u00a0/g, "");
+      const emptyAttr = isEmpty ? ' data-ve-empty=""' : "";
+      return fullMatch.replace(
+        tagInner,
+        tagInner + ` data-ve-view="${safeView}"${emptyAttr}`
+      );
+    });
+    if (updated !== html) {
+      lastWritten.current = updated;
+      setAttributes({ [attrName]: updated });
+    }
+  };
+  var applyViewsDOM = (postId, clientId) => {
+    const root = getEditorRoot();
+    if (!root) return;
+    const postWrapper = root.querySelector(`.post-${postId}`);
+    const scope = postWrapper || root.querySelector(`[data-block="${clientId}"]`) || root;
+    const spans = scope.querySelectorAll("span.ve-expr-token");
+    spans.forEach((span) => {
+      const expr = span.getAttribute("data-ve-expr");
+      if (!expr) return;
+      const view = viewCache.get(cacheKey(expr, postId));
+      if (view === void 0) return;
+      span.setAttribute("data-ve-view", view);
+      const isEmpty = !view.trim().replace(/\u00a0/g, "");
+      if (isEmpty) {
+        span.setAttribute("data-ve-empty", "");
+      } else {
+        span.removeAttribute("data-ve-empty");
+      }
+    });
+  };
+  var getEditorRoot = () => {
+    var _a2;
+    const iframe = document.querySelector('iframe[name="editor-canvas"]');
+    if ((_a2 = iframe == null ? void 0 : iframe.contentDocument) == null ? void 0 : _a2.body) return iframe.contentDocument.body;
+    return document.querySelector(".editor-styles-wrapper") || null;
+  };
+
   // modules/editor/constants.js
   var ctx = window.veContext || {};
   var ICON_POST = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -63,7 +350,7 @@
       prefix: "_pattern"
     }
   ];
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
   var VE_COMPLETIONS = [
     // ── User ──────────────────────────────────────────────────────────────────
     {
@@ -147,42 +434,42 @@
     {
       label: "Post: Content",
       expr: "post.content",
-      preview: ((_j = ctx.post) == null ? void 0 : _j.content) || "",
+      preview: "",
       category: "Post",
       prefix: "post"
     },
     {
       label: "Post: ID",
       expr: "post.id",
-      preview: ((_k = ctx.post) == null ? void 0 : _k.id) ? String(ctx.post.id) : "1",
+      preview: "1",
       category: "Post",
       prefix: "post"
     },
     {
       label: "Post: Slug",
       expr: "post.slug",
-      preview: ((_l = ctx.post) == null ? void 0 : _l.slug) || "my-post",
+      preview: "my-post",
       category: "Post",
       prefix: "post"
     },
     {
       label: "Post: Status",
       expr: "post.status",
-      preview: ((_m = ctx.post) == null ? void 0 : _m.status) || "publish",
+      preview: "publish",
       category: "Post",
       prefix: "post"
     },
     {
       label: "Post: Type",
       expr: "post.type",
-      preview: ((_n = ctx.post) == null ? void 0 : _n.type) || "post",
+      preview: "post",
       category: "Post",
       prefix: "post"
     },
     {
       label: "Post: Published Date",
       expr: "post.date | date",
-      preview: ((_o = ctx.post) == null ? void 0 : _o.date) || "January 1, 2024",
+      preview: "January 1, 2024",
       category: "Post",
       prefix: "post"
     },
@@ -196,7 +483,7 @@
     {
       label: "Post: Author Name",
       expr: "post.author_name",
-      preview: ((_p = ctx.post) == null ? void 0 : _p.author_name) || "Author",
+      preview: "Author",
       category: "Post",
       prefix: "post"
     },
@@ -210,7 +497,7 @@
     {
       label: "Post: URL",
       expr: "post.url",
-      preview: ((_q = ctx.post) == null ? void 0 : _q.url) || "",
+      preview: "",
       category: "Post",
       prefix: "post"
     },
@@ -225,28 +512,28 @@
     {
       label: "Site: Name",
       expr: "site.name",
-      preview: ((_r = ctx.site) == null ? void 0 : _r.name) || "My Site",
+      preview: ((_j = ctx.site) == null ? void 0 : _j.name) || "My Site",
       category: "Site",
       prefix: "site"
     },
     {
       label: "Site: Tagline",
       expr: "site.description",
-      preview: ((_s = ctx.site) == null ? void 0 : _s.description) || "",
+      preview: ((_k = ctx.site) == null ? void 0 : _k.description) || "",
       category: "Site",
       prefix: "site"
     },
     {
       label: "Site: URL",
       expr: "site.url",
-      preview: ((_t = ctx.site) == null ? void 0 : _t.url) || "",
+      preview: ((_l = ctx.site) == null ? void 0 : _l.url) || "",
       category: "Site",
       prefix: "site"
     },
     {
       label: "Site: Language",
       expr: "site.language",
-      preview: ((_u = ctx.site) == null ? void 0 : _u.language) || "en-US",
+      preview: ((_m = ctx.site) == null ? void 0 : _m.language) || "en-US",
       category: "Site",
       prefix: "site"
     },
@@ -408,7 +695,7 @@
     "core/shortcode",
     "core/verse"
   ]);
-  var TOKEN_REGEX = /(<mark\b[^>]*\bclass="ve-expr-token"[^>]*>[\s\S]*?<\/mark>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
+  var TOKEN_REGEX = /(<span\b[^>]*\bclass="ve-expr-token"[^>]*>[\s\S]*?<\/span>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
   var POPOVER_FOCUS_DELAY = 50;
 
   // modules/editor/auto-textarea.jsx
@@ -479,7 +766,7 @@
     slice,
     useAnchor
   } = window.wp.richText;
-  var { select } = window.wp.data;
+  var { select: select2 } = window.wp.data;
   var { RichTextToolbarButton } = window.wp.blockEditor;
   var useActiveTokenState = (isActive, contentRef, popoverOpen) => {
     useEffect(() => {
@@ -742,7 +1029,7 @@
         onChange: (val) => setEdit(val),
         placeholder: "user.is_logged_in",
         inputRef,
-        onKeyDown: async (e) => {
+        onKeyDown: (e) => {
           if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
@@ -751,7 +1038,7 @@
           }
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            await onUpdate();
+            onUpdate();
             onDismiss();
           }
         }
@@ -796,8 +1083,8 @@
       Button,
       {
         variant: "primary",
-        onClick: async () => {
-          await onUpdate();
+        onClick: () => {
+          onUpdate();
           onDismiss();
         }
       },
@@ -836,15 +1123,10 @@
       }
     }, [isActive]);
     useEffect(() => {
-      var _a3;
       if (isActive && (activeAttributes == null ? void 0 : activeAttributes.expr)) {
         setEdit(activeAttributes.expr);
-        setLivePreview({
-          preview: (_a3 = activeAttributes.view) != null ? _a3 : null,
-          valid: activeAttributes.valid !== "false"
-        });
       }
-    }, [isActive, popoverOpen, activeAttributes == null ? void 0 : activeAttributes.expr, activeAttributes == null ? void 0 : activeAttributes.view, activeAttributes == null ? void 0 : activeAttributes.valid]);
+    }, [isActive, popoverOpen, activeAttributes == null ? void 0 : activeAttributes.expr]);
     useEffect(() => {
       if (!isActive || !editExpr.trim()) {
         if (!editExpr.trim()) setLivePreview(null);
@@ -853,7 +1135,7 @@
       let isCancelled = false;
       const id = setTimeout(async () => {
         var _a3, _b2;
-        const postId = ((_b2 = (_a3 = select("core/editor")) == null ? void 0 : _a3.getCurrentPostId) == null ? void 0 : _b2.call(_a3)) || 0;
+        const postId = ((_b2 = (_a3 = select2("core/editor")) == null ? void 0 : _a3.getCurrentPostId) == null ? void 0 : _b2.call(_a3)) || 0;
         const view = await fetchPreview(editExpr.trim(), postId);
         if (!isCancelled) {
           setLivePreview(view);
@@ -875,15 +1157,19 @@
       }, POPOVER_FOCUS_DELAY);
       return () => clearTimeout(id);
     }, [popoverOpen]);
-    const applyUpdate = useCallback2(async () => {
+    const applyUpdate = useCallback2(() => {
       var _a3, _b2;
       const expr = editExpr.trim();
       if (!expr) return;
-      const postId = ((_b2 = (_a3 = select("core/editor")) == null ? void 0 : _a3.getCurrentPostId) == null ? void 0 : _b2.call(_a3)) || 0;
-      const view = await fetchPreview(expr, postId);
+      const postId = ((_b2 = (_a3 = window.wp.data.select("core/editor")) == null ? void 0 : _a3.getCurrentPostId) == null ? void 0 : _b2.call(_a3)) || 0;
+      const cached = getCachedView(expr, postId);
+      const attrs = { expr, contentEditable: "false" };
+      if (cached !== void 0) {
+        attrs.view = cached;
+      }
       const next = applyFormat(value, {
         type: "vector/expression",
-        attributes: { expr, view: view.preview, valid: view.valid ? "true" : "false", speculative: "true", contentEditable: "false" }
+        attributes: attrs
       });
       next.start = next.end;
       onChange(next);
@@ -968,9 +1254,6 @@
       attributes: {
         expr: "data-ve-expr",
         view: "data-ve-view",
-        speculative: "data-ve-speculative",
-        empty: "data-ve-empty",
-        active: "data-ve-active",
         contentEditable: "contenteditable"
       },
       __unstableInputRule(value) {
@@ -1134,10 +1417,7 @@
   var {
     Fragment,
     useState: useState2,
-    useEffect: useEffect2,
-    useLayoutEffect: useLayoutEffect3,
     useMemo,
-    useRef: useRef3,
     useCallback: useCallback3
   } = window.wp.element;
   var { createHigherOrderComponent } = window.wp.compose;
@@ -1150,148 +1430,51 @@
     ExternalLink
   } = window.wp.components;
   var { __: __2 } = window.wp.i18n;
-  var { select: select2, useSelect } = window.wp.data;
+  var { select: select3 } = window.wp.data;
   var getRichTextAttrName = (blockName) => {
-    const blockType = select2("core/blocks").getBlockType(blockName);
+    const blockType = select3("core/blocks").getBlockType(blockName);
     if (!(blockType == null ? void 0 : blockType.attributes)) return null;
     const entry = Object.entries(blockType.attributes).find(
       ([, cfg]) => cfg.source === "html" || cfg.source === "rich-text"
     );
     return entry ? entry[0] : null;
   };
-  var convertTokens = (html) => {
+  var convertTokens = (html, postId = 0) => {
     TOKEN_REGEX.lastIndex = 0;
     return html.replace(
       TOKEN_REGEX,
       (match, existingSpan, codeBlock, _fullExpr, expr) => {
         if (codeBlock) return codeBlock;
         if (existingSpan && existingSpan.startsWith("<span ")) {
-          if (!existingSpan.includes("data-ve-speculative")) {
-            return existingSpan.replace("<span ", '<span data-ve-speculative="true" ');
-          }
           return existingSpan;
         }
         const e = expr.trim().replace(/\s*\|\s*/g, " | ");
-        const opt = getCompletions().find((o) => o.expr === e);
-        const view = (opt == null ? void 0 : opt.preview) || e;
         const safeExpr = e.replace(/"/g, "&quot;");
-        const safeView = view.replace(/"/g, "&quot;");
-        return `<span class="ve-expr-token" data-ve-expr="${safeExpr}" data-ve-view="${safeView}" data-ve-speculative="true" contenteditable="false">{{ ${e} }}</span>`;
+        const cached = getCachedView(e, postId);
+        let viewAttrs = "";
+        if (cached !== void 0) {
+          const safeView = cached.replace(/"/g, "&quot;");
+          const isEmpty = !cached.trim().replace(/\u00a0/g, "");
+          viewAttrs = ` data-ve-view="${safeView}"${isEmpty ? ' data-ve-empty=""' : ""}`;
+        }
+        return `<span class="ve-expr-token" data-ve-expr="${safeExpr}"${viewAttrs} contenteditable="false">{{ ${e} }}</span>`;
       }
     );
   };
-  var usePass1Conversion = (setAttributes, attrName, blockName) => useCallback3(
+  var usePass1Conversion = (setAttributes, attrName, blockName, postId) => useCallback3(
     (attrs) => {
       if (!attrName || SKIP_CONVERT_BLOCKS.has(blockName)) return setAttributes(attrs);
       if (!(attrName in attrs)) return setAttributes(attrs);
       const raw = attrs[attrName];
       const html = typeof raw === "string" ? raw : String(raw != null ? raw : "");
       if (!html.includes("{{")) return setAttributes(attrs);
-      const converted = convertTokens(html);
+      const converted = convertTokens(html, postId);
       setAttributes(
         converted !== html ? { ...attrs, [attrName]: converted } : attrs
       );
     },
-    [setAttributes, attrName, blockName]
+    [setAttributes, attrName, blockName, postId]
   );
-  var usePass2Resolution = (attributes, attrName, blockName, postId) => {
-    const [refreshTick, setRefreshTick] = useState2(0);
-    const [virtualTick, setVirtualTick] = useState2(0);
-    const prevRefreshTick = useRef3(0);
-    const prevSaving = useRef3(false);
-    const localViews = useRef3(/* @__PURE__ */ new Map());
-    const isSavingPost = useSelect(
-      (sel) => {
-        var _a2, _b2, _c2;
-        return (_c2 = (_b2 = (_a2 = sel("core/editor")) == null ? void 0 : _a2.isSavingPost) == null ? void 0 : _b2.call(_a2)) != null ? _c2 : false;
-      },
-      []
-    );
-    useEffect2(() => {
-      var _a2, _b2, _c2;
-      const justFinished = prevSaving.current && !isSavingPost;
-      prevSaving.current = isSavingPost;
-      if (!justFinished) return;
-      const didSucceed = (_c2 = (_b2 = (_a2 = select2("core/editor")) == null ? void 0 : _a2.didPostSaveRequestSucceed) == null ? void 0 : _b2.call(_a2)) != null ? _c2 : false;
-      if (didSucceed) setRefreshTick((t) => t + 1);
-    }, [isSavingPost]);
-    useEffect2(() => {
-      if (!attrName || SKIP_CONVERT_BLOCKS.has(blockName)) return;
-      const raw = attributes[attrName];
-      const html = typeof raw === "string" ? raw : String(raw != null ? raw : "");
-      if (!html.includes("ve-expr-token")) return;
-      const isForced = refreshTick !== prevRefreshTick.current;
-      prevRefreshTick.current = refreshTick;
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-      const spans = Array.from(doc.querySelectorAll("span.ve-expr-token"));
-      const toFetch = spans.reduce((acc, span) => {
-        const expr = span.dataset.veExpr;
-        const view = span.dataset.veView;
-        if (!expr) return acc;
-        const isSpeculative = span.hasAttribute("data-ve-speculative");
-        const unresolved = !view || view.trim() === expr.trim() || isSpeculative;
-        if (isForced || unresolved) acc.push({ expr, span });
-        return acc;
-      }, []);
-      if (toFetch.length === 0) return;
-      let cancelled = false;
-      const uniqueExprs = [...new Set(toFetch.map((u) => u.expr))];
-      Promise.all(
-        uniqueExprs.map((expr) => fetchPreview(expr, postId).then((p) => ({ expr, preview: (p == null ? void 0 : p.preview) || "" })))
-      ).then((results) => {
-        if (cancelled) return;
-        let changed = false;
-        results.forEach((r) => {
-          if (localViews.current.get(r.expr) !== r.preview) {
-            localViews.current.set(r.expr, r.preview);
-            changed = true;
-          }
-        });
-        if (changed) {
-          setVirtualTick((t) => t + 1);
-        }
-      });
-      return () => {
-        cancelled = true;
-      };
-    }, [attributes[attrName], refreshTick, postId]);
-    let virtualAttributes = attributes;
-    if (attrName && !SKIP_CONVERT_BLOCKS.has(blockName)) {
-      const raw = attributes[attrName];
-      if (typeof raw === "string" && raw.includes("ve-expr-token")) {
-        const doc = new DOMParser().parseFromString(raw, "text/html");
-        let changed = false;
-        Array.from(doc.querySelectorAll("span.ve-expr-token")).forEach((span) => {
-          const expr = span.dataset.veExpr;
-          if (span.hasAttribute("data-ve-speculative")) {
-            span.removeAttribute("data-ve-speculative");
-            changed = true;
-          }
-          if (localViews.current.has(expr)) {
-            const p = localViews.current.get(expr);
-            if (p !== null && p !== void 0 && p !== span.dataset.veView) {
-              const hasVisibleContent = /\S/.test(p.replace(/\u00a0/g, ""));
-              span.dataset.veView = p != null ? p : "";
-              if (hasVisibleContent) {
-                delete span.dataset.veEmpty;
-              } else {
-                span.dataset.veEmpty = "";
-              }
-              changed = true;
-            }
-          }
-        });
-        if (changed) {
-          virtualAttributes = {
-            ...attributes,
-            [attrName]: doc.body.innerHTML
-          };
-        }
-      }
-    }
-    return virtualAttributes;
-  };
   var ClassTextarea = ({ value, onChange, placeholder }) => {
     const { __: __3 } = window.wp.i18n;
     return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-class-field" }, /* @__PURE__ */ wp.element.createElement(
@@ -1371,18 +1554,19 @@
   };
   var LogicPanel = createHigherOrderComponent((BlockEdit) => {
     return (props) => {
-      var _a2, _b2;
-      const { attributes, setAttributes, isSelected, name, context } = props;
+      var _a2, _b2, _c2, _d2;
+      const { attributes, setAttributes, isSelected, name, context, clientId } = props;
       const { ve_logic } = attributes;
       const [showRef, setShowRef] = useState2(false);
       const attrName = useMemo(() => getRichTextAttrName(name), [name]);
-      const wrappedSetAttributes = usePass1Conversion(setAttributes, attrName, name);
+      const postId = (context == null ? void 0 : context.postId) || ((_b2 = (_a2 = select3("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
+      const postType = (context == null ? void 0 : context.postType) || ((_d2 = (_c2 = select3("core/editor")) == null ? void 0 : _c2.getCurrentPostType) == null ? void 0 : _d2.call(_c2)) || "post";
+      const wrappedSetAttributes = usePass1Conversion(setAttributes, attrName, name, postId);
       const newProps = { ...props, setAttributes: wrappedSetAttributes };
-      const postId = (context == null ? void 0 : context.postId) || ((_b2 = (_a2 = select2("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
-      const virtualAttributes = usePass2Resolution(attributes, attrName, name, postId);
-      if (!isSelected) return /* @__PURE__ */ wp.element.createElement(BlockEdit, { ...newProps, attributes: virtualAttributes });
+      useHydrateViews(attributes, setAttributes, attrName, name, postId, postType, clientId);
+      if (!isSelected) return /* @__PURE__ */ wp.element.createElement(BlockEdit, { ...newProps });
       const update = (key, val) => setAttributes({ ve_logic: { ...ve_logic != null ? ve_logic : {}, [key]: val } });
-      return /* @__PURE__ */ wp.element.createElement(Fragment, null, /* @__PURE__ */ wp.element.createElement(BlockEdit, { ...newProps, attributes: virtualAttributes }), /* @__PURE__ */ wp.element.createElement(InspectorControls, null, /* @__PURE__ */ wp.element.createElement(
+      return /* @__PURE__ */ wp.element.createElement(Fragment, null, /* @__PURE__ */ wp.element.createElement(BlockEdit, { ...newProps }), /* @__PURE__ */ wp.element.createElement(InspectorControls, null, /* @__PURE__ */ wp.element.createElement(
         LogicInspectorPanel,
         {
           ve_logic,
@@ -1395,12 +1579,21 @@
   }, "LogicPanel");
   var registerLogicPanel = () => {
     addFilter2("editor.BlockEdit", "ve/logic-panel", LogicPanel);
+    const REQUIRED_CONTEXT = ["postId", "postType"];
     addFilter2("blocks.registerBlockType", "ve-logic/inject-context", (settings, name) => {
       if (SKIP_CONVERT_BLOCKS.has(name)) return settings;
-      return {
-        ...settings,
-        usesContext: [...settings.usesContext || [], "postId", "postType"]
-      };
+      const existing = settings.usesContext || [];
+      const missing = REQUIRED_CONTEXT.filter((c) => !existing.includes(c));
+      if (missing.length === 0) return settings;
+      return { ...settings, usesContext: [...existing, ...missing] };
+    });
+    const { getBlockTypes, unregisterBlockType, registerBlockType } = window.wp.blocks;
+    (getBlockTypes() || []).forEach((type) => {
+      if (SKIP_CONVERT_BLOCKS.has(type.name)) return;
+      const existing = type.usesContext || [];
+      const missing = REQUIRED_CONTEXT.filter((c) => !existing.includes(c));
+      if (missing.length === 0) return;
+      type.usesContext = [...existing, ...missing];
     });
   };
 

@@ -12,13 +12,13 @@
  *      resolved text into each span's `data-ve-view` attribute.
  */
 
-import { fetchPreview }                              from './api.js';
 import { getCompletions, SKIP_CONVERT_BLOCKS, TOKEN_REGEX } from './constants.js';
+import { useHydrateViews, getCachedView }              from './hydrator.js';
 import { VectorArrowLogo }                           from './logo.jsx';
 import { AutoTextarea }                              from './auto-textarea.jsx';
 
 const {
-	Fragment, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback,
+	Fragment, useState, useMemo, useCallback,
 } = window.wp.element;
 const { createHigherOrderComponent }                  = window.wp.compose;
 const { addFilter }                                   = window.wp.hooks;
@@ -26,7 +26,7 @@ const { InspectorControls }                           = window.wp.blockEditor;
 const { PanelBody, Button,
 	SelectControl, ExternalLink }                     = window.wp.components;
 const { __ }                                          = window.wp.i18n;
-const { select, useSelect }                           = window.wp.data;
+const { select }                                      = window.wp.data;
 
 /**
  * Returns the name of the first `html` or `rich-text` attribute for a block
@@ -52,7 +52,7 @@ const getRichTextAttrName = ( blockName ) => {
  * @param {string} html Raw attribute HTML.
  * @returns {string} Converted HTML (same reference if nothing changed).
  */
-const convertTokens = ( html ) => {
+const convertTokens = ( html, postId = 0 ) => {
 	// Reset lastIndex before re-using the shared global-flag RegExp.
 	TOKEN_REGEX.lastIndex = 0;
 	return html.replace(
@@ -60,21 +60,25 @@ const convertTokens = ( html ) => {
 		( match, existingSpan, codeBlock, _fullExpr, expr ) => {
 			if ( codeBlock ) return codeBlock;
 
-			// In Text mode, simply flag the existing span as speculative to render the placeholder
+			// Already a converted span — leave it alone.
 			if ( existingSpan && existingSpan.startsWith( '<span ' ) ) {
-				if ( ! existingSpan.includes( 'data-ve-speculative' ) ) {
-					return existingSpan.replace( '<span ', '<span data-ve-speculative="true" ' );
-				}
 				return existingSpan;
 			}
 
 			const e        = expr.trim().replace( /\s*\|\s*/g, ' | ' );
-			const opt      = getCompletions().find( ( o ) => o.expr === e );
-			const view     = opt?.preview || e;
 			const safeExpr = e.replace( /"/g, '&quot;' );
-			const safeView = view.replace( /"/g, '&quot;' );
 
-			return `<span class="ve-expr-token" data-ve-expr="${ safeExpr }" data-ve-view="${ safeView }" data-ve-speculative="true" contenteditable="false">{{ ${ e } }}</span>`;
+			// Include cached preview so the format data has the view
+			// from the start — preventing flash on React re-renders.
+			const cached   = getCachedView( e, postId );
+			let viewAttrs  = '';
+			if ( cached !== undefined ) {
+				const safeView = cached.replace( /"/g, '&quot;' );
+				const isEmpty  = ! cached.trim().replace( /\u00a0/g, '' );
+				viewAttrs = ` data-ve-view="${ safeView }"${ isEmpty ? ' data-ve-empty=""' : '' }`;
+			}
+
+			return `<span class="ve-expr-token" data-ve-expr="${ safeExpr }"${ viewAttrs } contenteditable="false">{{ ${ e } }}</span>`;
 		},
 	);
 };
@@ -91,7 +95,7 @@ const convertTokens = ( html ) => {
  * @param {string} blockName       Block slug.
  * @returns {Function}
  */
-const usePass1Conversion = ( setAttributes, attrName, blockName ) =>
+const usePass1Conversion = ( setAttributes, attrName, blockName, postId ) =>
 	useCallback(
 		( attrs ) => {
 			if ( ! attrName || SKIP_CONVERT_BLOCKS.has( blockName ) ) return setAttributes( attrs );
@@ -101,140 +105,16 @@ const usePass1Conversion = ( setAttributes, attrName, blockName ) =>
 			const html = typeof raw === 'string' ? raw : String( raw ?? '' );
 			if ( ! html.includes( '{{' ) )                             return setAttributes( attrs );
 
-			const converted = convertTokens( html );
+			const converted = convertTokens( html, postId );
 			setAttributes( converted !== html
 				? { ...attrs, [ attrName ]: converted }
 				: attrs
 			);
 		},
-		[ setAttributes, attrName, blockName ],
+		[ setAttributes, attrName, blockName, postId ],
 	);
 
-/**
- * Pass 2 — Async REST resolution.
- *
- * Watches the block's rich-text attribute for unresolved pills and fetches
- * live previews in a single deduplicated batch. Re-fetches all pills on the
- * trailing edge of a successful post-save.
- *
- * @param {object}      attributes
- * @param {Function}    setAttributes
- * @param {string}      blockName
- * @param {number}      postId
- */
-const usePass2Resolution = ( attributes, attrName, blockName, postId ) => {
-	const [ refreshTick, setRefreshTick ] = useState( 0 );
-	const [ virtualTick, setVirtualTick ] = useState( 0 );
-	const prevRefreshTick = useRef( 0 );
-	const prevSaving      = useRef( false );
-	const localViews      = useRef( new Map() );
 
-	const isSavingPost = useSelect(
-		( sel ) => sel( 'core/editor' )?.isSavingPost?.() ?? false,
-		[],
-	);
-
-	useEffect( () => {
-		const justFinished = prevSaving.current && ! isSavingPost;
-		prevSaving.current = isSavingPost;
-		if ( ! justFinished ) return;
-
-		const didSucceed = select( 'core/editor' )?.didPostSaveRequestSucceed?.() ?? false;
-		if ( didSucceed ) setRefreshTick( ( t ) => t + 1 );
-	}, [ isSavingPost ] );
-
-	useEffect( () => {
-		if ( ! attrName || SKIP_CONVERT_BLOCKS.has( blockName ) ) return;
-
-		const raw  = attributes[ attrName ];
-		const html = typeof raw === 'string' ? raw : String( raw ?? '' );
-		if ( ! html.includes( 've-expr-token' ) ) return;
-
-		const isForced          = refreshTick !== prevRefreshTick.current;
-		prevRefreshTick.current = refreshTick;
-
-		const parser = new DOMParser();
-		const doc    = parser.parseFromString( html, 'text/html' );
-		const spans  = Array.from( doc.querySelectorAll( 'span.ve-expr-token' ) );
-
-		const toFetch = spans.reduce( ( acc, span ) => {
-			const expr          = span.dataset.veExpr;
-			const view          = span.dataset.veView;
-			if ( ! expr ) return acc;
-
-			// Check for the speculative flag
-			const isSpeculative = span.hasAttribute( 'data-ve-speculative' );
-			const unresolved    = ! view || view.trim() === expr.trim() || isSpeculative;
-
-			if ( isForced || unresolved ) acc.push( { expr, span } );
-			return acc;
-		}, [] );
-
-		if ( toFetch.length === 0 ) return;
-
-		let cancelled     = false;
-		
-		const uniqueExprs = [ ...new Set( toFetch.map( ( u ) => u.expr ) ) ];
-
-		Promise.all(
-			uniqueExprs.map( ( expr ) => fetchPreview( expr, postId ).then( ( p ) => ( { expr, preview: p?.preview || '' } ) ) )
-		).then( ( results ) => {
-			if ( cancelled ) return;
-			let changed = false;
-			results.forEach( ( r ) => {
-				if ( localViews.current.get( r.expr ) !== r.preview ) {
-                    localViews.current.set( r.expr, r.preview );
-                    changed = true;
-                }
-			} );
-
-			if ( changed ) {
-				setVirtualTick( ( t ) => t + 1 );
-			}
-		} );
-
-		return () => { cancelled = true; };
-	}, [ attributes[ attrName ], refreshTick, postId ] );
-
-	let virtualAttributes = attributes;
-
-	if ( attrName && ! SKIP_CONVERT_BLOCKS.has( blockName ) ) {
-		const raw = attributes[ attrName ];
-		if ( typeof raw === 'string' && raw.includes( 've-expr-token' ) ) {
-			const doc = new DOMParser().parseFromString( raw, 'text/html' );
-			let changed = false;
-			Array.from( doc.querySelectorAll( 'span.ve-expr-token' ) ).forEach( ( span ) => {
-				const expr = span.dataset.veExpr;
-				if ( span.hasAttribute( 'data-ve-speculative' ) ) {
-					span.removeAttribute( 'data-ve-speculative' );
-					changed = true;
-				}
-				if ( localViews.current.has( expr ) ) {
-					const p = localViews.current.get( expr );
-					if ( p !== null && p !== undefined && p !== span.dataset.veView ) {
-						const hasVisibleContent = /\S/.test( p.replace( /\u00a0/g, '' ) );
-						span.dataset.veView = p ?? '';
-						if ( hasVisibleContent ) {
-							delete span.dataset.veEmpty;
-						} else {
-							span.dataset.veEmpty = '';
-						}
-						changed = true;
-					}
-				}
-			} );
-
-			if ( changed ) {
-				virtualAttributes = {
-					...attributes,
-					[ attrName ]: doc.body.innerHTML
-				};
-			}
-		}
-	}
-
-	return virtualAttributes;
-};
 
 /**
  * ClassTextarea — thin wrapper around AutoTextarea with the class-field
@@ -377,27 +257,29 @@ const LogicInspectorPanel = ( { ve_logic, update, showRef, setShowRef } ) => {
  */
 const LogicPanel = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
-		const { attributes, setAttributes, isSelected, name, context } = props;
+		const { attributes, setAttributes, isSelected, name, context, clientId } = props;
 		const { ve_logic }  = attributes;
 		const [ showRef, setShowRef ] = useState( false );
 
-		const attrName = useMemo( () => getRichTextAttrName( name ), [ name ] );
+		const attrName  = useMemo( () => getRichTextAttrName( name ), [ name ] );
+		const postId    = context?.postId || select( 'core/editor' )?.getCurrentPostId?.() || 0;
+		const postType  = context?.postType || select( 'core/editor' )?.getCurrentPostType?.() || 'post';
 
-		const wrappedSetAttributes = usePass1Conversion( setAttributes, attrName, name );
+		const wrappedSetAttributes = usePass1Conversion( setAttributes, attrName, name, postId );
 		const newProps             = { ...props, setAttributes: wrappedSetAttributes };
 
-		const postId = context?.postId || select( 'core/editor' )?.getCurrentPostId?.() || 0;
+		// Hydrate expression tokens with server-evaluated previews.
+		// Runs per-block so it has the correct postId for Query Loop iterations.
+		useHydrateViews( attributes, setAttributes, attrName, name, postId, postType, clientId );
 
-		const virtualAttributes = usePass2Resolution( attributes, attrName, name, postId );
-
-		if ( ! isSelected ) return <BlockEdit { ...newProps } attributes={ virtualAttributes } />;
+		if ( ! isSelected ) return <BlockEdit { ...newProps } />;
 
 		const update = ( key, val ) =>
 			setAttributes( { ve_logic: { ...( ve_logic ?? {} ), [ key ]: val } } );
 
 		return (
 			<Fragment>
-				<BlockEdit { ...newProps } attributes={ virtualAttributes } />
+				<BlockEdit { ...newProps } />
 				<InspectorControls>
 					<LogicInspectorPanel
 						ve_logic={ ve_logic }
@@ -418,12 +300,31 @@ const LogicPanel = createHigherOrderComponent( ( BlockEdit ) => {
 export const registerLogicPanel = () => {
 	addFilter( 'editor.BlockEdit', 've/logic-panel', LogicPanel );
 	
-	// Inject `postId` native context into all compatible blocks utilizing JS registry
+	const REQUIRED_CONTEXT = [ 'postId', 'postType' ];
+
+	// Intercept future block registrations.
 	addFilter( 'blocks.registerBlockType', 've-logic/inject-context', ( settings, name ) => {
 		if ( SKIP_CONVERT_BLOCKS.has( name ) ) return settings;
-		return {
-			...settings,
-			usesContext: [ ...( settings.usesContext || [] ), 'postId', 'postType' ]
-		};
+		const existing = settings.usesContext || [];
+		const missing  = REQUIRED_CONTEXT.filter( ( c ) => ! existing.includes( c ) );
+		if ( missing.length === 0 ) return settings;
+		return { ...settings, usesContext: [ ...existing, ...missing ] };
+	} );
+
+	// Patch block types that were already registered before our filter.
+	// Without this, core blocks like core/paragraph never receive
+	// context.postId from Query Loop iterations, and all previews
+	// repeat the first iteration's values.
+	const { getBlockTypes, unregisterBlockType, registerBlockType } = window.wp.blocks;
+	( getBlockTypes() || [] ).forEach( ( type ) => {
+		if ( SKIP_CONVERT_BLOCKS.has( type.name ) ) return;
+		const existing = type.usesContext || [];
+		const missing  = REQUIRED_CONTEXT.filter( ( c ) => ! existing.includes( c ) );
+		if ( missing.length === 0 ) return;
+
+		// Mutate the type object directly — Gutenberg stores a mutable
+		// reference in its internal registry. This avoids the cost and
+		// side-effects of an unregister/re-register cycle.
+		type.usesContext = [ ...existing, ...missing ];
 	} );
 };
