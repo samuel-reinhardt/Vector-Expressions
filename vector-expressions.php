@@ -7,7 +7,7 @@ declare( strict_types=1 );
  * Plugin URI:        https://vectorarrow.com/products/vector-expressions/
  * Description:       Logic engine for Gutenberg. Personalize content and control block visibility.
  * Version:           1.0.1
- * Author:            Vector WP
+ * Author:            Vector Arrow LLC
  * Author URI:        https://vectorarrow.com
  * License:           GPL v2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
