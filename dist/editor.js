@@ -158,6 +158,13 @@
     tmp.innerHTML = html;
     return (_a2 = tmp.textContent) != null ? _a2 : "";
   };
+  var cleanPreview = (val) => {
+    if (!val) return val;
+    const text = stripHtml(val);
+    const el2 = document.createElement("textarea");
+    el2.innerHTML = text;
+    return el2.value;
+  };
   var viewCache = /* @__PURE__ */ new Map();
   var cacheKey = (expr, postId) => `${expr}::${postId}`;
   var getCachedView = (expr, postId) => viewCache.get(cacheKey(expr, postId));
@@ -246,8 +253,9 @@
       if (/\bdata-ve-view="/.test(tagInner)) return fullMatch;
       const view = viewCache.get(cacheKey(expr, postId));
       if (view === void 0) return fullMatch;
-      const safeView = view.replace(/"/g, "&quot;");
-      const isEmpty = !view.trim().replace(/\u00a0/g, "");
+      const cleaned = cleanPreview(view);
+      const safeView = cleaned.replace(/"/g, "&quot;");
+      const isEmpty = !cleaned.trim().replace(/\u00a0/g, "");
       const emptyAttr = isEmpty ? ' data-ve-empty=""' : "";
       return fullMatch.replace(
         tagInner,
@@ -270,8 +278,9 @@
       if (!expr) return;
       const view = viewCache.get(cacheKey(expr, postId));
       if (view === void 0) return;
-      span.setAttribute("data-ve-view", view);
-      const isEmpty = !view.trim().replace(/\u00a0/g, "");
+      const cleaned = cleanPreview(view);
+      span.setAttribute("data-ve-view", cleaned);
+      const isEmpty = !cleaned.trim().replace(/\u00a0/g, "");
       if (isEmpty) {
         span.setAttribute("data-ve-empty", "");
       } else {

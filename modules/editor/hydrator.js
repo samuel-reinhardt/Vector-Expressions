@@ -149,6 +149,24 @@ const stripHtml = (html) => {
   return tmp.textContent ?? "";
 };
 
+/**
+ * Strip HTML tags and decode entities for preview-safe plain text.
+ *
+ * Preview values are rendered via CSS `content: attr(data-ve-view)`,
+ * which treats its input as plain text. This ensures any residual
+ * HTML (e.g. WooCommerce price markup) is converted to readable text.
+ *
+ * @param {string} val Raw preview value.
+ * @returns {string} Plain-text preview.
+ */
+const cleanPreview = (val) => {
+  if (!val) return val;
+  const text = stripHtml(val);
+  const el = document.createElement("textarea");
+  el.innerHTML = text;
+  return el.value;
+};
+
 const formatDate = (iso) => {
   if (!iso) return "";
   // WordPress stores dates in the site's local timezone WITHOUT an offset
@@ -332,8 +350,9 @@ const applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
     const view = viewCache.get(cacheKey(expr, postId));
     if (view === undefined) return fullMatch;
 
-    const safeView = view.replace(/"/g, "&quot;");
-    const isEmpty = !view.trim().replace(/\u00a0/g, "");
+    const cleaned = cleanPreview(view);
+    const safeView = cleaned.replace(/"/g, "&quot;");
+    const isEmpty = !cleaned.trim().replace(/\u00a0/g, "");
     const emptyAttr = isEmpty ? ' data-ve-empty=""' : "";
 
     return fullMatch.replace(
@@ -376,8 +395,9 @@ const applyViewsDOM = (postId, clientId) => {
     const view = viewCache.get(cacheKey(expr, postId));
     if (view === undefined) return;
 
-    span.setAttribute("data-ve-view", view);
-    const isEmpty = !view.trim().replace(/\u00a0/g, "");
+    const cleaned = cleanPreview(view);
+    span.setAttribute("data-ve-view", cleaned);
+    const isEmpty = !cleaned.trim().replace(/\u00a0/g, "");
     if (isEmpty) {
       span.setAttribute("data-ve-empty", "");
     } else {

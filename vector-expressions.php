@@ -203,7 +203,7 @@ final class VectorExpressions {
 			// evaluate_raw parses the expression directly without needing to wrap it in {{ }} tags 
 			// and then run it through the preg_replace regex matcher.
 			$val     = $this->parser->evaluate_raw( $expr );
-			$preview = (string) $val;
+			$preview = $this->strip_preview_html( (string) $val );
 		} catch ( \Throwable $e ) {
 			$valid   = false;
 			$preview = $e->getMessage();
@@ -512,7 +512,7 @@ final class VectorExpressions {
 
 				try {
 					$val  = $this->parser->evaluate_raw( $raw_expr );
-					$view = $this->parser->safe_string( $val );
+					$view = $this->strip_preview_html( $this->parser->safe_string( $val ) );
 				} catch ( \Throwable $e ) {
 					$view = '';
 				}
@@ -535,6 +535,21 @@ final class VectorExpressions {
 		} finally {
 			$this->parser->context->protect_global_content = false;
 		}
+	}
+
+	/**
+	 * Strip HTML tags and decode entities for editor preview display.
+	 *
+	 * Preview values are rendered via CSS `content: attr(data-ve-view)`,
+	 * which treats its input as plain text. Any HTML tags or encoded
+	 * entities would appear literally, so we strip them here.
+	 *
+	 * @param string $html Raw preview value (may contain HTML).
+	 * @return string Plain-text preview safe for CSS content rendering.
+	 */
+	private function strip_preview_html( string $html ): string {
+		$text = wp_strip_all_tags( $html );
+		return html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	}
 
 	/**
