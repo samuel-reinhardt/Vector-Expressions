@@ -22,8 +22,7 @@ const {
 } = window.wp.element;
 const { createHigherOrderComponent }                  = window.wp.compose;
 const { addFilter }                                   = window.wp.hooks;
-const { InspectorControls }                           = window.wp.blockEditor;
-const { PanelBody, Button,
+const { Button,
 	SelectControl, ExternalLink }                     = window.wp.components;
 const { __ }                                          = window.wp.i18n;
 const { select }                                      = window.wp.data;
@@ -157,18 +156,11 @@ const ClassTextarea = ( { value, onChange, placeholder } ) => {
  *   setShowRef:  Function,
  * }} props
  */
-const LogicInspectorPanel = ( { ve_logic, update, showRef, setShowRef } ) => {
+const LogicSidebarContent = ( { ve_logic, update, blockName } ) => {
+	const [ showRef, setShowRef ] = useState( false );
 
 	return (
-		<PanelBody
-			title={
-				<span className="ve-panel-title">
-					<VectorArrowLogo />
-					{ __( 'Vector Expressions', 'vector-expressions' ) }
-				</span>
-			}
-			initialOpen={ false }
-		>
+		<Fragment>
 			{ /* ── Visibility ───────────────────────────────── */ }
 			<div className="ve-section">
 				<p className="ve-section-label">{ __( 'Visibility', 'vector-expressions' ) }</p>
@@ -184,20 +176,24 @@ const LogicInspectorPanel = ( { ve_logic, update, showRef, setShowRef } ) => {
 					__nextHasNoMarginBottom
 				/>
 
-				<div className="ve-class-field">
+				<div className="ve-class-field ve-condition-field">
 					<label
 						className="components-base-control__label"
 						htmlFor="ve-condition-input"
 					>
 						{ __( 'Condition', 'vector-expressions' ) }
 					</label>
-					<AutoTextarea
-						id="ve-condition-input"
-						value={ ve_logic?.visible || '' }
-						onChange={ ( v ) => update( 'visible', v ) }
-						placeholder="user.is_logged_in"
-						className="ve-class-textarea"
-					/>
+					<div className="ve-expr-field">
+						<span className="ve-expr-brace" aria-hidden="true">{'{{ '}</span>
+						<AutoTextarea
+							id="ve-condition-input"
+							value={ ve_logic?.visible || '' }
+							onChange={ ( v ) => update( 'visible', v ) }
+							placeholder="user.is_logged_in"
+							className="ve-class-textarea"
+						/>
+						<span className="ve-expr-brace" aria-hidden="true">{' }}'}</span>
+					</div>
 				</div>
 
 				{ /* Syntax Reference – right below the field it helps with */ }
@@ -244,7 +240,7 @@ const LogicInspectorPanel = ( { ve_logic, update, showRef, setShowRef } ) => {
 				/>
 			</div>
 
-		</PanelBody>
+		</Fragment>
 	);
 };
 
@@ -257,9 +253,8 @@ const LogicInspectorPanel = ( { ve_logic, update, showRef, setShowRef } ) => {
  */
 const LogicPanel = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
-		const { attributes, setAttributes, isSelected, name, context, clientId } = props;
+		const { attributes, setAttributes, name, context, clientId } = props;
 		const { ve_logic }  = attributes;
-		const [ showRef, setShowRef ] = useState( false );
 
 		const attrName  = useMemo( () => getRichTextAttrName( name ), [ name ] );
 		const postId    = context?.postId || select( 'core/editor' )?.getCurrentPostId?.() || 0;
@@ -272,24 +267,7 @@ const LogicPanel = createHigherOrderComponent( ( BlockEdit ) => {
 		// Runs per-block so it has the correct postId for Query Loop iterations.
 		useHydrateViews( attributes, setAttributes, attrName, name, postId, postType, clientId );
 
-		if ( ! isSelected ) return <BlockEdit { ...newProps } />;
-
-		const update = ( key, val ) =>
-			setAttributes( { ve_logic: { ...( ve_logic ?? {} ), [ key ]: val } } );
-
-		return (
-			<Fragment>
-				<BlockEdit { ...newProps } />
-				<InspectorControls>
-					<LogicInspectorPanel
-						ve_logic={ ve_logic }
-						update={ update }
-						showRef={ showRef }
-						setShowRef={ setShowRef }
-					/>
-				</InspectorControls>
-			</Fragment>
-		);
+		return <BlockEdit { ...newProps } />;
 	};
 }, 'LogicPanel' );
 
@@ -298,12 +276,29 @@ const LogicPanel = createHigherOrderComponent( ( BlockEdit ) => {
  * Called once from the editor entry point.
  */
 export const registerLogicPanel = () => {
-	addFilter( 'editor.BlockEdit', 've/logic-panel', LogicPanel );
-	
+	addFilter( 'editor.BlockEdit', 've.logic-panel', LogicPanel );
+
+	// Register VE core controls into the Vector sidebar.
+	addFilter(
+		'vectorExpressions.sidebar.tab.logic',
+		've.sidebar-logic',
+		( content, ve_logic, update, blockName ) => {
+			return (
+				<Fragment>
+					{ content }
+					<LogicSidebarContent
+						ve_logic={ ve_logic }
+						update={ update }
+						blockName={ blockName }
+					/>
+				</Fragment>
+			);
+		},
+	);
 	const REQUIRED_CONTEXT = [ 'postId', 'postType' ];
 
 	// Intercept future block registrations.
-	addFilter( 'blocks.registerBlockType', 've-logic/inject-context', ( settings, name ) => {
+	addFilter( 'blocks.registerBlockType', 've-logic.inject-context', ( settings, name ) => {
 		if ( SKIP_CONVERT_BLOCKS.has( name ) ) return settings;
 		const existing = settings.usesContext || [];
 		const missing  = REQUIRED_CONTEXT.filter( ( c ) => ! existing.includes( c ) );

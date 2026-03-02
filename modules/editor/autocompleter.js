@@ -58,13 +58,13 @@ const getOptions = (query) => {
     return completions.filter((o) => o.prefix === "|");
   }
 
-  // Root prefix match → domain-specific completions.
-  if (q.startsWith("post"))
-    return completions.filter((o) => o.prefix === "post");
-  if (q.startsWith("user"))
-    return completions.filter((o) => o.prefix === "user");
-  if (q.startsWith("site"))
-    return completions.filter((o) => o.prefix === "site");
+  // Dynamic root prefix match — check all unique prefixes from completions.
+  const prefixes = new Set(completions.map((o) => o.prefix).filter(Boolean));
+  for (const prefix of prefixes) {
+    if (prefix !== "|" && q.startsWith(prefix)) {
+      return completions.filter((o) => o.prefix === prefix);
+    }
+  }
 
   // Substring fallback across full list.
   return completions.filter(
@@ -172,7 +172,7 @@ const buildCompleter = () => ({
 export const registerAutocompleter = () => {
   addFilter(
     "editor.Autocomplete.completers",
-    "vector-expressions/autocompleter",
+    "vector-expressions.autocompleter",
     (completers) => [...completers, buildCompleter()],
   );
 };

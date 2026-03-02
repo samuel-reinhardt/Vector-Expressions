@@ -7,6 +7,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.1] - 2026-03-01
+
+### Added
+
+- Dedicated **Vector** sidebar tab in the block editor alongside Post and Block tabs.
+- **Expression tab** — clicking an in-content expression token opens the sidebar with a focused editor (input, live preview, apply/remove).
+- **Accordion suggestions** with searchable filter — categories auto-expand when searching.
+- Tabbed layout with per-tab content filters (`vectorExpressions.sidebar.tab.*`).
+- `vectorExpressions.sidebar.tabs` filter for extensions to register additional tabs.
+- `vectorExpressions.suggestions.roots` filter for extensions to register root categories.
+- `vectorExpressions.suggestions.patterns` filter for extensions to add curated patterns.
+- `vectorExpressions.suggestions.categories` filter for extensions to customize accordion sections.
+- Single-tab mode: when no extensions add tabs, content renders without the tab strip.
+
+### Changed
+
+- **Expression editing moved from popover to sidebar** — the floating popover is removed.
+- Accordion categories are dynamically derived from completions data.
+- Moved Visibility and Dynamic Class controls from the block inspector into the new sidebar.
+- Logic panel HOC is now UI-free — only handles pass1/pass2 token conversion.
+
+### Fixed
+
+- Invalid forward slashes in WordPress hook namespace arguments (`addFilter`) replaced with dots — resolves React "Rendered fewer hooks than expected" crash on block selection.
+
+---
+
 ## [1.0.0] - 2025-02-24
 
 ### Added
@@ -55,6 +82,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Filter aliases** — `uppercase` (→ `upper`), `lowercase` (→ `lower`), `capitalize` (→ `upper_first`) for more readable expressions.
 - **Keyword meta deny list** — `ObjectProxy` and `get_meta` now block meta keys containing sensitive substrings (`pass`, `token`, `secret`, `api_key`, `auth`, `nonce`, `salt`, `credential`, `private_key`) as a defense-in-depth layer beyond `is_protected_meta()`. The list is filterable via `vector_expressions/security/sensitive_meta_keywords`.
 - **`vector_expressions/error` action** — Fires on every expression evaluation failure. Allows production error tracking (logging, Sentry, etc.) without exposing details in the frontend HTML.
+- **`vectorExpressions.logicPanel.sections` JS filter** — Extension point for adding custom sections to the Vector Expressions inspector panel from JavaScript. Used by Pro to inject Dynamic Bindings UI.
 
 ### Fixed
 

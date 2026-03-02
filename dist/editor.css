@@ -37,6 +37,7 @@
 	--ve-font-sm:        12px;
 	--ve-locked-opacity: 0.6;
 	--ve-logo-size:      16px;
+	--ve-logo-icon:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-376 -15 92 126'%3E%3Cg fill='%230d6632'%3E%3Cpath d='M-372.384 54.856V40.32q5.39-.242 7.935-2.12 2.604-1.878 3.937-5.875 1.393-3.998 1.393-13.507 0-11.993 1.09-16.354 1.09-4.421 3.453-7.026 2.422-2.665 7.026-4.361 4.664-1.696 13.386-1.696h3.21v14.537q-6.481 0-8.48.727-1.999.666-2.968 2.241-.909 1.575-.909 5.815 0 7.632-.726 17.02-.485 6.117-3.332 10.963-2.12 3.574-7.329 6.965 4.422 2.544 7.026 6.481 2.605 3.877 3.453 9.873.363 2.604.848 16.96.181 5.269.666 6.541.787 1.878 2.907 2.847 2.181.969 8.843.969v14.476h-3.21q-8.783 0-13.023-1.454-4.24-1.393-6.905-4.179-2.665-2.726-3.876-6.965-1.151-4.18-1.151-14.476 0-11.508-1.272-15.506-1.211-4.058-3.876-6.057-2.605-1.999-8.117-2.302z'/%3E%3Cpath d='M-329.857 54.856V40.32q5.39-.242 7.934-2.12 2.605-1.878 3.937-5.875 1.393-3.998 1.393-13.507 0-11.993 1.09-16.354 1.09-4.421 3.453-7.026 2.423-2.665 7.026-4.361 4.664-1.696 13.386-1.696h3.21v14.537q-6.481 0-8.48.727-1.998.666-2.968 2.241-.908 1.575-.908 5.815 0 7.632-.727 17.02-.485 6.117-3.331 10.963-2.12 3.574-7.329 6.965 4.422 2.544 7.026 6.481 2.605 3.877 3.453 9.873.363 2.604.848 16.96.181 5.269.666 6.541.787 1.878 2.907 2.847 2.181.969 8.843.969v14.476h-3.21q-8.783 0-13.023-1.454-4.24-1.393-6.905-4.179-2.665-2.726-3.876-6.965-1.151-4.18-1.151-14.476 0-11.508-1.272-15.506-1.211-4.058-3.876-6.057-2.605-1.999-8.117-2.302z'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 /**
@@ -63,6 +64,37 @@
 	padding-top: 16px;
 	margin-top: 8px;
 	border-top: 1px solid #e0e0e0;
+}
+
+/**
+ * Condition field — extra top margin to separate from the Action select.
+ */
+.ve-condition-field {
+	margin-top: 12px;
+}
+
+/**
+ * Expression field wrapper — flanks the textarea with decorative {{ }}.
+ */
+.ve-expr-field {
+	display: flex;
+	align-items: flex-start;
+	gap: 0;
+}
+
+.ve-expr-field .ve-class-textarea {
+	flex: 1;
+	min-width: 0;
+}
+
+.ve-expr-brace {
+	font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 36px;
+	color: #0d6632;
+	user-select: none;
+	flex-shrink: 0;
 }
 
 /**
@@ -205,7 +237,6 @@
 	/* Layout */
 	display:        inline-block;
 	vertical-align: baseline;
-	white-space:    nowrap;
 	cursor:         pointer!important;
 }
 
@@ -233,9 +264,14 @@
  */
 .ve-expr-token:not([data-ve-view])::before,
 .ve-expr-token[data-ve-view=""]::before {
-	content:    '⚡ Dynamic';
-	opacity:    0.55;
-	font-style: italic;
+	content:             'Dynamic';
+	opacity:             0.55;
+	font-style:          italic;
+	padding-left:        1.1em;
+	background-image:    var( --ve-logo-icon );
+	background-repeat:   no-repeat;
+	background-size:     0.85em 0.85em;
+	background-position: left center;
 }
 
 /*
@@ -245,12 +281,17 @@
  * edit or delete it.
  */
 .ve-expr-token[data-ve-empty]::before {
-	content:     '⚡ Dynamic';
-	opacity:     0.55;
-	font-style:  italic;
+	content:             'Dynamic';
+	opacity:             0.55;
+	font-style:          italic;
+	padding-left:        1.1em;
+	background-image:    var( --ve-logo-icon );
+	background-repeat:   no-repeat;
+	background-size:     0.85em 0.85em;
+	background-position: left center;
 	/* Ensure minimum width so a zero-content token is never invisible */
-	min-width:   4ch;
-	display:     inline-block;
+	min-width:           4ch;
+	display:             inline-block;
 }
 
 /* Hover: signal interactivity by solidifying the underline */
@@ -487,4 +528,149 @@
 .ve-class-textarea::placeholder {
 	color: #a0adb8;
 	font-style: italic;
+}
+
+/* ── Vector Sidebar ──────────────────────────────────────────────────────── */
+
+/* Empty state when no block is selected */
+.ve-sidebar-empty {
+	padding: 32px 16px;
+	color: #757575;
+	font-size: 13px;
+	text-align: center;
+}
+
+/* Tab strip — icon-only, scrollable overflow */
+.ve-sidebar-tabs .components-tab-panel__tabs {
+	display: flex;
+	border-bottom: 1px solid #e0e0e0;
+	margin: 0;
+	padding: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+.ve-sidebar-tabs .components-tab-panel__tabs::-webkit-scrollbar {
+	display: none;
+}
+
+.ve-sidebar-tabs .components-tab-panel__tabs button {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 8px 14px;
+	color: #757575;
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	cursor: pointer;
+	transition: color 0.15s, border-color 0.15s;
+}
+
+.ve-sidebar-tabs .components-tab-panel__tabs button:hover {
+	color: #1e1e1e;
+}
+
+.ve-sidebar-tabs .components-tab-panel__tabs button.is-active {
+	color: #1e1e1e;
+	border-bottom-color: #5df4a3;
+}
+
+/* Tab icon wrapper */
+.ve-tab-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 0;
+}
+
+/* Tab content panel — consistent padding */
+.ve-sidebar-tab-content {
+	padding: 16px;
+}
+
+/* ── Accordion Suggestions ──────────────────────────────────────────────────── */
+
+.ve-suggestions {
+	margin-top: 16px;
+}
+
+.ve-suggestions-search {
+	margin-bottom: 8px;
+}
+
+.ve-suggestions-search input {
+	width: 100%;
+	font-size: 12px;
+	padding: 6px 8px;
+}
+
+.ve-suggestions-group {
+	border-top: 1px solid #e0e0e0;
+}
+
+.ve-suggestions-group:last-child {
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.ve-suggestions-header {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	padding: 8px 0;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #757575;
+	background: none;
+	border: none;
+	cursor: pointer;
+	gap: 6px;
+}
+
+.ve-suggestions-header:hover {
+	color: #1e1e1e;
+}
+
+.ve-suggestions-header.is-open {
+	color: #1e1e1e;
+}
+
+.ve-suggestions-count {
+	font-size: 10px;
+	font-weight: 400;
+	color: #949494;
+	background: #f0f0f0;
+	border-radius: 8px;
+	padding: 1px 6px;
+	min-width: 16px;
+	text-align: center;
+}
+
+.ve-suggestions-arrow {
+	margin-left: auto;
+	font-size: 8px;
+	color: #949494;
+}
+
+.ve-suggestions-items {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	padding: 0 0 8px 0;
+	max-height: 160px;
+	overflow-y: auto;
+}
+
+.ve-suggestion-chip.components-button {
+	font-size: 12px;
+	padding: 4px 8px;
+	height: auto;
+	line-height: 1.4;
+	white-space: normal;
+	text-align: left;
 }

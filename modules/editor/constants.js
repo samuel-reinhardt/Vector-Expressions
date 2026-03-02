@@ -63,6 +63,19 @@ export const VE_ROOTS = [
   },
 ];
 
+/**
+ * Retrieves the current roots list, allowing extensions to add their own
+ * via the `vectorExpressions.suggestions.roots` JS filter.
+ */
+export const getRoots = () => {
+  return window.wp?.hooks?.applyFilters
+    ? window.wp.hooks.applyFilters(
+        "vectorExpressions.suggestions.roots",
+        VE_ROOTS,
+      )
+    : VE_ROOTS;
+};
+
 // ── Flat completion list ───────────────────────────────────────────────────────
 
 /**
@@ -422,7 +435,7 @@ export const VE_COMPLETIONS = [
 export const getCompletions = () => {
   return window.wp?.hooks?.applyFilters
     ? window.wp.hooks.applyFilters(
-        "vector_expressions/editor/completions",
+        "vector_expressions.editor.completions",
         VE_COMPLETIONS,
       )
     : VE_COMPLETIONS;

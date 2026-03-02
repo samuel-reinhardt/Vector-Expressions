@@ -2,36 +2,34 @@
  * Vector Expressions — ExpressionEdit component + format type registration.
  *
  * Registers the `vector/expression` rich-text format and provides the
- * popover UI that lets users view, edit, and remove expression tokens.
+ * editing UX by opening the Vector sidebar Expression tab when a token
+ * is activated. The actual editor UI lives in the sidebar; this module
+ * handles format registration, keyboard nav, and rich-text mutations.
  */
 
 import { fetchPreview }        from './api.js';
 import { getCachedView }       from './hydrator.js';
-import { POPOVER_FOCUS_DELAY, getCompletions, VE_ROOTS } from './constants.js';
+import { POPOVER_FOCUS_DELAY, getCompletions, getRoots } from './constants.js';
 import { AutoTextarea }       from './auto-textarea.jsx';
+import { STORE_NAME, setTokenRefs } from './expression-store.js';
 
 const {
-	useState, useEffect, useLayoutEffect, useRef, useCallback,
+	useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo,
 } = window.wp.element;
 const {
-	Popover, Button, TabPanel, Icon
+	Button, Icon
 } = window.wp.components;
 const { __ }                                    = window.wp.i18n;
 const { registerFormatType, applyFormat,
 	removeFormat, concat, slice, useAnchor }    = window.wp.richText;
-const { select }                                = window.wp.data;
+const { select, useSelect, useDispatch }        = window.wp.data;
 const { RichTextToolbarButton }                 = window.wp.blockEditor;
 
 /**
  * Mirrors `data-ve-active` on the active token span in sync with
- * Gutenberg's `isActive` prop. Strips the attribute only when the
- * popover is closed to ensure a stable anchor target while editing.
- *
- * @param {boolean} isActive
- * @param {React.RefObject} contentRef
- * @param {boolean} popoverOpen
+ * Gutenberg's `isActive` prop.
  */
-const useActiveTokenState = ( isActive, contentRef, popoverOpen ) => {
+const useActiveTokenState = ( isActive, contentRef, sidebarActive ) => {
 	useEffect( () => {
 		const el = contentRef?.current;
 		if ( ! el ) return;
@@ -39,22 +37,17 @@ const useActiveTokenState = ( isActive, contentRef, popoverOpen ) => {
 		if ( isActive ) {
 			const span = el.querySelector( 'span.ve-expr-token[data-rich-text-format-boundary]' );
 			if ( span ) span.setAttribute( 'data-ve-active', '' );
-		} else if ( ! popoverOpen ) {
-			// We might also be left stranded if normal editing removed the boundary span but left other ones.
+		} else if ( ! sidebarActive ) {
 			el.querySelectorAll( 'span.ve-expr-token' ).forEach( ( m ) => {
 				m.removeAttribute( 'data-ve-active' );
 				m.removeAttribute( 'data-rich-text-format-boundary' );
 			} );
 		}
-	}, [ isActive, contentRef, popoverOpen ] );
+	}, [ isActive, contentRef, sidebarActive ] );
 };
 
 /**
  * Walks up the DOM from `n` to find the nearest `span.ve-expr-token`, or null.
- *
- * @param {Node}    n   Starting node.
- * @param {Element} el  Boundary element (the editor root).
- * @returns {Element|null}
  */
 const getTokenSpan = ( n, el ) => {
 	let cur = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
@@ -67,11 +60,6 @@ const getTokenSpan = ( n, el ) => {
 
 /**
  * Collapses `sel` to just before or after `span`.
- *
- * @param {Selection}        sel
- * @param {Document}         doc
- * @param {Element}          span
- * @param {'before'|'after'} side
  */
 const placeCursorAdjacentToSpan = ( sel, doc, span, side ) => {
 	const range = doc.createRange();
@@ -84,22 +72,7 @@ const placeCursorAdjacentToSpan = ( sel, doc, span, side ) => {
 
 /**
  * Attaches capture-phase `keydown` and `click` listeners on the editor
- * document for token keyboard navigation and click-to-open behaviour.
- *
- * Keyboard contract:
- *   - Escape       → dismiss popover from anywhere in the iframe
- *   - Tab          → accept highlighted autocomplete suggestion
- *   - ArrowLeft/Right → jump cursor out of a contenteditable=false token
- *   - Enter/Space  → open token popover when a token is the active format
- *   - Printable    → relocate cursor adjacent to token before letting the char land
- *
- * @param {React.RefObject} contentRef
- * @param {{
- *   isActiveRef:       React.RefObject<boolean>,
- *   popoverOpenRef:    React.RefObject<boolean>,
- *   dismissPopoverRef: React.RefObject<Function>,
- *   setPopoverOpenRef: React.RefObject<Function>,
- * }} refs
+ * document for token keyboard navigation.
  */
 const useTokenEventListeners = ( contentRef, refs ) => {
 	useEffect( () => {
@@ -111,10 +84,10 @@ const useTokenEventListeners = ( contentRef, refs ) => {
 
 			const { key } = evt;
 
-			if ( key === 'Escape' && refs.popoverOpenRef.current ) {
+			if ( key === 'Escape' && refs.tokenActiveRef.current ) {
 				evt.preventDefault();
 				evt.stopPropagation();
-				refs.dismissPopoverRef.current?.();
+				refs.dismissRef.current?.();
 				return;
 			}
 
@@ -153,16 +126,16 @@ const useTokenEventListeners = ( contentRef, refs ) => {
 					if ( inside || ! range.collapsed ) {
 						evt.preventDefault();
 						evt.stopPropagation();
-						refs.setPopoverOpenRef.current( true );
+						refs.openSidebarRef.current?.();
 					}
 					return;
 				}
 			}
 
-			// Relocate cursor adjacent to the token before any printable character lands
+			// Relocate cursor adjacent to token before printable character lands.
 			if (
 				refs.isActiveRef.current &&
-				! refs.popoverOpenRef.current &&
+				! refs.tokenActiveRef.current &&
 				key.length === 1 &&
 				! evt.ctrlKey &&
 				! evt.metaKey
@@ -204,14 +177,8 @@ const useTokenEventListeners = ( contentRef, refs ) => {
 
 // ── ExpressionSuggestions ────────────────────────────────────────────────────
 
-/**
- * Derive suggestion chips from what the user has typed in the expression field.
- *
- * @param {string} expr Current expression value.
- * @returns {Array} Up to 8 suggestion items.
- */
 /** Curated complex-expression patterns shown when the user picks the Patterns root. */
-const VE_PATTERNS = [
+const VE_PATTERNS_DEFAULT = [
 	{ expr: "post.title | default 'Untitled'",                   label: 'Post title with fallback' },
 	{ expr: "user.is_logged_in ? user.name : 'Guest'",           label: 'Greeting (logged in)' },
 	{ expr: "post.date | date 'F j, Y'",                         label: 'Formatted publish date' },
@@ -222,391 +189,219 @@ const VE_PATTERNS = [
 	{ expr: 'post.excerpt | default post.content',               label: 'Excerpt or full content' },
 ];
 
-const getSuggestions = ( expr ) => {
-	const trimmed = expr.trim();
-
-	// Nothing typed → show 4 root entry-point cards.
-	if ( trimmed === '' ) return VE_ROOTS;
-
-	// Patterns was selected — show categorized pattern chips.
-	if ( trimmed === '_pattern.' ) return VE_PATTERNS;
-
-	const lower = trimmed.toLowerCase();
-
-	// Pipe in expr → show filter completions.
-	if ( lower.includes( '|' ) ) {
-		return getCompletions().filter( ( o ) => o.prefix === '|' ).slice( 0, 8 );
-	}
-
-	// Match by expr prefix first, then label substring.
-	const completions = getCompletions();
-	const byExpr  = completions.filter( ( o ) => o.expr.toLowerCase().startsWith( lower ) );
-	const byLabel = completions.filter( ( o ) => ! o.expr.toLowerCase().startsWith( lower ) && o.label.toLowerCase().includes( lower ) );
-	return [ ...byExpr, ...byLabel ].slice( 0, 8 );
+/**
+ * Returns the curated pattern list, filterable by extensions.
+ * Filter: `vectorExpressions.suggestions.patterns`
+ */
+const getPatterns = () => {
+	const { applyFilters } = window.wp.hooks;
+	return applyFilters
+		? applyFilters( 'vectorExpressions.suggestions.patterns', VE_PATTERNS_DEFAULT )
+		: VE_PATTERNS_DEFAULT;
 };
 
 /**
- * Horizontal scrollable chip row shown below the Expression TextControl.
+ * Build accordion categories dynamically from the completions list.
+ * Each unique `category` value in the completions becomes a section.
+ * The Patterns category is appended at the end.
  *
- * Items may be `VE_ROOTS` descriptors (root cards) or `VeCompletion` objects
- * (property / filter chips). Clicking a chip sets the expression field.
- *
- * @param {{ expr: string, onSelect: Function, inputRef: React.RefObject }} props
+ * The final list is filterable via `vectorExpressions.suggestions.categories`
+ * so extensions can add/reorder/remove sections.
  */
-const ExpressionSuggestions = ( { expr, onSelect, inputRef } ) => {
-	const suggestions = getSuggestions( expr );
-	const hasSpecificSuggestions = suggestions.length > 0 && expr.trim() !== '';
-	const completions = getCompletions();
+const getCategories = ( completions ) => {
+	// Collect unique categories from completions (preserving insertion order).
+	// Skip "Pattern" — it has a dedicated section via getPatterns().
+	const seen = new Map();
+	for ( const item of completions ) {
+		const cat = item.category;
+		if ( ! cat || cat === 'Pattern' ) continue;
+		if ( ! seen.has( cat ) ) {
+			seen.set( cat, { key: cat.toLowerCase(), label: cat, items: [] } );
+		}
+		seen.get( cat ).items.push( item );
+	}
 
-	const suggestionsGrouped = {
-		common: suggestions,
-		post: completions.filter( s => s.category === 'Post' ),
-		user: completions.filter( s => s.category === 'User' ),
-		site: completions.filter( s => s.category === 'Site' ),
-		modifier: completions.filter( s => s.category === 'Modifier' ),
+	// Append patterns as a dedicated category at the end.
+	const cats = [ ...seen.values() ];
+	cats.push( { key: 'pattern', label: __( 'Patterns', 'vector-expressions' ), items: getPatterns() } );
+
+	const { applyFilters } = window.wp.hooks;
+	return applyFilters
+		? applyFilters( 'vectorExpressions.suggestions.categories', cats, completions )
+		: cats;
+};
+
+/**
+ * Accordion + search-filter suggestion list.
+ * Categories are collapsible. When search is active, all expand to reveal matches.
+ * Exported so the sidebar Expression tab can reuse it.
+ */
+export const ExpressionSuggestions = ( { expr, onSelect } ) => {
+	const [ search, setSearch ]   = useState( '' );
+	const [ open, setOpen ]       = useState( {} );
+	const completions             = getCompletions();
+	const categories              = getCategories( completions );
+
+	const query     = search.toLowerCase().trim();
+	const searching = query.length > 0;
+
+	const toggle = ( key ) => {
+		setOpen( ( prev ) => ( { ...prev, [ key ]: ! prev[ key ] } ) );
 	};
 
-	const renderChip = ( s ) => {
-		const root    = 'prefix' in s && ! ( 'category' in s ) && ! ( 'label' in s && 'expr' in s && ! ( 'prefix' in s ) );
-		const pattern = ! root && 'label' in s && 'expr' in s && ! ( 'prefix' in s ) && ! ( 'category' in s );
-
-		// What gets inserted when this chip is clicked.
-		const insertExpr = root
-			? ( s.prefix === '_pattern' ? '_pattern.' : s.prefix + '.' )
-			: s.expr;
-
-		// Human label shown in the chip.
-		const chipLabel = root
-			? s.label
-			: pattern
-				? s.label
-				: s.label.replace(/^(Post|User|Site|Modifier|Pattern):\s*/, '');
-
-		return (
-			<Button
-				key={ insertExpr + chipLabel }
-				variant="secondary"
-				onMouseDown={ ( e ) => e.preventDefault() }
-				onClick={ ( e ) => {
-					e.preventDefault();
-					
-					let newValue = insertExpr;
-
-					if ( s.category === 'Modifier' ) {
-						let appended = expr.trim();
-						if ( ! appended.endsWith( '|' ) && appended.length > 0 ) {
-							appended += ' ';
-						}
-						newValue = appended + insertExpr;
-					}
-					
-					onSelect( newValue );
-					
-					// Instead of relying on WebComponent value override, we just rely on react state
-					setTimeout( () => {
-						const el = document.querySelector('.ve-expr-input textarea');
-						if(el) el.focus();
-					}, 0 );
-				} }
-				style={ { textAlign: 'left', justifyContent: 'flex-start', padding: '8px 12px', whiteSpace: 'normal', height: 'auto', lineHeight: '1.3' } }
-			>
-				<span style={{ fontSize: '13px' }}>
-					{ chipLabel }
-				</span>
-			</Button>
+	const filterItems = ( items ) => {
+		if ( ! searching ) return items;
+		return items.filter( ( s ) =>
+			( s.expr || '' ).toLowerCase().includes( query ) ||
+			( s.label || '' ).toLowerCase().includes( query )
 		);
 	};
 
-	const tabs = [
-		{
-			name: 'suggestions',
-			title: hasSpecificSuggestions ? __( 'Suggestions', 'vector-expressions' ) : __( 'Common', 'vector-expressions' ),
-			className: 've-tab-suggestions',
-		},
-		{
-			name: 'post',
-			title: __( 'Post', 'vector-expressions' ),
-			className: 've-tab-post',
-		},
-		{
-			name: 'user',
-			title: __( 'User', 'vector-expressions' ),
-			className: 've-tab-user',
-		},
-		{
-			name: 'modifiers',
-			title: __( 'Modifiers', 'vector-expressions' ),
-			className: 've-tab-modifiers',
-		},
-		{
-			name: 'patterns',
-			title: __( 'Patterns', 'vector-expressions' ),
-			className: 've-tab-patterns',
-		},
-	];
+	const handleSelect = ( s ) => {
+		const isPattern = ! ( 'category' in s ) && ! ( 'prefix' in s );
+		const insertExpr = s.expr;
+
+		let newValue = insertExpr;
+
+		if ( s.category === 'Modifier' ) {
+			let appended = expr.trim();
+			if ( ! appended.endsWith( '|' ) && appended.length > 0 ) {
+				appended += ' ';
+			}
+			newValue = appended + insertExpr;
+		}
+
+		onSelect( newValue );
+	};
 
 	return (
-		<div style={{ marginTop: '16px' }}>
-			<TabPanel
-				className="ve-expression-tabs"
-				activeClass="is-active"
-				tabs={ tabs }
-			>
-				{ ( tab ) => {
-					const renderItems = (items, isGrid) => (
-						<div style={{
-							display: isGrid ? 'grid' : 'flex',
-							flexDirection: isGrid ? 'row' : 'column',
-							gridTemplateColumns: isGrid ? '1fr 1fr' : 'none',
-							gap: '8px',
-							maxHeight: '200px',
-							overflowY: 'auto',
-							paddingTop: '16px',
-							paddingBottom: '4px'
-						}}>
-							{ items.map(renderChip) }
-						</div>
-					);
+		<div className="ve-suggestions">
+			<div className="ve-suggestions-search">
+				<input
+					type="text"
+					className="components-text-control__input"
+					placeholder={ __( 'Filter suggestions…', 'vector-expressions' ) }
+					value={ search }
+					onChange={ ( e ) => setSearch( e.target.value ) }
+				/>
+			</div>
 
-					switch ( tab.name ) {
-						case 'post': return renderItems(suggestionsGrouped.post, true);
-						case 'user': return renderItems(suggestionsGrouped.user, true);
-						case 'modifiers': return renderItems(suggestionsGrouped.modifier, false);
-						case 'patterns': return renderItems(VE_PATTERNS, false);
-						default: return renderItems(suggestionsGrouped.common, false);
-					}
-				} }
-			</TabPanel>
+			{ categories.map( ( cat ) => {
+				const filtered = filterItems( cat.items );
+				if ( searching && filtered.length === 0 ) return null;
+
+				const isOpen = searching || !! open[ cat.key ];
+
+				return (
+					<div key={ cat.key } className="ve-suggestions-group">
+						<button
+							className={ 've-suggestions-header' + ( isOpen ? ' is-open' : '' ) }
+							onClick={ () => ! searching && toggle( cat.key ) }
+							aria-expanded={ isOpen }
+						>
+							<span>{ cat.label }</span>
+							<span className="ve-suggestions-count">{ filtered.length }</span>
+							{ ! searching && <span className="ve-suggestions-arrow">{ isOpen ? '▲' : '▼' }</span> }
+						</button>
+						{ isOpen && (
+							<div className="ve-suggestions-items">
+								{ filtered.map( ( s ) => (
+									<Button
+										key={ s.expr + ( s.label || '' ) }
+										variant="secondary"
+										size="small"
+										className="ve-suggestion-chip"
+										onMouseDown={ ( e ) => e.preventDefault() }
+										onClick={ () => handleSelect( s ) }
+									>
+										{ ( s.label || s.expr ).replace( /^(Post|User|Site|Modifier):\s*/, '' ) }
+									</Button>
+								) ) }
+							</div>
+						) }
+					</div>
+				);
+			} ) }
 		</div>
 	);
 };
 
-// ── TokenPopover ──────────────────────────────────────────────────────────────
+// ── ExpressionEdit ───────────────────────────────────────────────────────────
 
 /**
- * Popover with expression input, inline suggestions, and Update / Remove actions.
- *
- * @param {{
- *   anchor:            *,
- *   getFallbackAnchor: Function,
- *   editExpr:          string,
- *   setEdit:           Function,
- *   onUpdate:          Function,
- *   onRemove:          Function,
- *   onDismiss:         Function,
- *   inputRef:          React.RefObject,
- * }} props
- */
-const TokenPopover = ( { anchor, getFallbackAnchor, editExpr, setEdit, onUpdate, onRemove, onDismiss, inputRef, previewObj } ) => (
-	<Popover
-		anchor={ anchor || { getBoundingClientRect: getFallbackAnchor } }
-		placement="bottom"
-		className="ve-pill-popover"
-		focusOnMount={ false }
-		onKeyDown={ ( evt ) => {
-			if ( evt.key === 'Escape' ) {
-				evt.preventDefault();
-				evt.stopPropagation();
-				onDismiss();
-			}
-		} }
-	>
-		<div className="ve-expression-builder" style={ { padding: '16px', width: '420px', boxSizing: 'border-box' } }>
-			
-			{/* Header & Input */}
-			<div style={ { display: 'flex', flexDirection: 'column', gap: '8px' } }>
-				<label style={{ fontSize: '13px', fontWeight: 600 }}>{ __( 'Vector Expression', 'vector-expressions' ) }</label>
-				<AutoTextarea
-					className="ve-expr-input ve-class-textarea"
-					value={ editExpr }
-					onChange={ ( val ) => setEdit( val ) }
-					placeholder="user.is_logged_in"
-					inputRef={ inputRef }
-					onKeyDown={ ( e ) => {
-						if ( e.key === 'Escape' ) {
-							e.preventDefault();
-							e.stopPropagation();
-							onDismiss();
-							return;
-						}
-						if ( e.key === 'Enter' && ! e.shiftKey ) {
-							e.preventDefault();
-							onUpdate();
-							onDismiss();
-						}
-					} }
-				/>
-			</div>
-
-			{/* Live Evaluation Preview */}
-			<div className="ve-live-preview" style={ { 
-				display: 'flex',
-				alignItems: 'center',
-				justifyContent: 'space-between',
-				gap: '8px',
-				marginTop: '12px',
-				background: ! previewObj || ! previewObj.valid ? '#fcf0f1' : '#f0f0f0', 
-				padding: '12px', 
-				borderRadius: '4px',
-				border: '1px solid ' + ( ! previewObj || ! previewObj.valid ? '#cc1818' : '#e0e0e0' )
-			} }>
-				<div style={ { display: 'flex', alignItems: 'center', gap: '8px', color: '#1e1e1e', fontSize: '12px' } }>
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-					<span>{ __( 'Preview', 'vector-expressions' ) }</span>
-				</div>
-				<code style={ { 
-					color: ! previewObj || ! previewObj.valid ? '#cc1818' : '#39b074',
-					maxWidth: '200px',
-					overflow: 'hidden',
-					textOverflow: 'ellipsis',
-					whiteSpace: 'nowrap',
-					fontSize: '14px',
-					fontFamily: 'monospace'
-				} }>
-					{ ! previewObj || ! previewObj.valid ? (editExpr ? (previewObj?.preview || __( 'Invalid syntax', 'vector-expressions' )) : '') : String(previewObj.preview) }
-				</code>
-			</div>
-
-			<ExpressionSuggestions
-				expr={ editExpr }
-				onSelect={ setEdit }
-				inputRef={ inputRef }
-			/>
-
-			{/* Footer Actions */}
-			<footer style={ { display: 'flex', justifyContent: 'space-between', marginTop: '16px' } }>
-				<Button 
-					variant="secondary"
-					isDestructive
-					onClick={ () => { onRemove(); onDismiss(); } }
-				>
-					{ __( 'Remove', 'vector-expressions' ) }
-				</Button>
-				<Button 
-					variant="primary" 
-					onClick={ () => { onUpdate(); onDismiss(); } }
-				>
-					{ __( 'Apply', 'vector-expressions' ) }
-				</Button>
-			</footer>
-			
-		</div>
-	</Popover>
-);
-
-/**
- * Rich-text format edit component rendered by Gutenberg when
- * `vector/expression` is the active format.
- *
- * Always mounts (so event listeners always run). Only renders
- * `TokenPopover` when the user explicitly activates a token.
- *
- * @param {{
- *   isActive:         boolean,
- *   activeAttributes: object,
- *   value:            WPRichTextValue,
- *   onChange:         Function,
- *   contentRef:       React.RefObject,
- * }} props
+ * Rich-text format edit component. Instead of rendering a popover,
+ * it opens the Vector sidebar and publishes state to the active-token store.
  */
 const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentRef } ) => {
-	const [ editExpr,       setEdit ]           = useState( '' );
-	const [ popoverOpen,    setPopoverOpen ]     = useState( false );
-	const [ livePreview,    setLivePreview ]     = useState( null );
-	const inputRef = useRef( null );
+	const isActiveRef      = useRef( false );
+	const tokenActiveRef   = useRef( false );
+	const dismissRef       = useRef( null );
+	const openSidebarRef   = useRef( null );
 
-	const isActiveRef       = useRef( false );
-	const popoverOpenRef    = useRef( false );
-	const dismissPopoverRef = useRef( null );
-	const setPopoverOpenRef = useRef( null );
+	const storeDispatch    = useDispatch( STORE_NAME );
+	const sidebarDispatch  = useDispatch( 'core/edit-post' );
 
-	// Keep refs current synchronously on every render.
-	setPopoverOpenRef.current = setPopoverOpen;
-	popoverOpenRef.current = popoverOpen;
+	const isTokenStoreActive = useSelect( ( sel ) => sel( STORE_NAME ).isTokenActive(), [] );
+	tokenActiveRef.current = isTokenStoreActive;
 
-	// Native Gutenberg hook to track the active selection range or node across the iframe boundary.
-	const virtualAnchor = useAnchor( {
-		editableContentElement: contentRef.current,
-		settings: { tagName: 'span', className: 've-expr-token' }
-	} );
-
-	// useLayoutEffect so refs are updated before any keydown can fire.
 	useLayoutEffect( () => { isActiveRef.current = isActive; }, [ isActive ] );
 
-	useActiveTokenState( isActive, contentRef, popoverOpen );
+	useActiveTokenState( isActive, contentRef, isTokenStoreActive );
 
-	useTokenEventListeners( contentRef, {
-		isActiveRef, popoverOpenRef,
-		dismissPopoverRef, setPopoverOpenRef,
-	} );
+	// ── Open sidebar when a token becomes active ──
+	const openSidebar = useCallback( () => {
+		const expr = activeAttributes?.expr || '';
+		storeDispatch.setActiveToken( expr );
 
-	// Automatically open the popover if the format becomes active.
-	// This replaces brittle global click listeners, relying on Gutenberg
-	// natively triggering `isActive` true when a token is cursor'd into or clicked.
+		// Open Vector sidebar. The method name varies by WP version.
+		if ( sidebarDispatch.openGeneralSidebar ) {
+			sidebarDispatch.openGeneralSidebar( 'vector-expressions/vector-expressions' );
+		}
+	}, [ activeAttributes?.expr, storeDispatch, sidebarDispatch ] );
+
+	openSidebarRef.current = openSidebar;
+
+	// When format becomes active, open the sidebar.
 	useEffect( () => {
-		if ( isActive && ! popoverOpen ) {
-			setPopoverOpen( true );
+		if ( isActive ) {
+			openSidebar();
 		}
 	}, [ isActive ] );
 
+	// Sync expression from active attributes when they change.
 	useEffect( () => {
 		if ( isActive && activeAttributes?.expr ) {
-			setEdit( activeAttributes.expr );
+			storeDispatch.updateExpr( activeAttributes.expr );
 		}
-	}, [ isActive, popoverOpen, activeAttributes?.expr ] );
+	}, [ isActive, activeAttributes?.expr ] );
 
-	// Debounced real-time preview computation
+	// When format deactivates, clear the store.
 	useEffect( () => {
-		if ( ! isActive || ! editExpr.trim() ) {
-			if ( ! editExpr.trim() ) setLivePreview( null );
-			return;
+		if ( ! isActive ) {
+			storeDispatch.clearActiveToken();
 		}
-		
-		let isCancelled = false;
-		const id = setTimeout( async () => {
-			const postId = select( 'core/editor' )?.getCurrentPostId?.() || 0;
-			const view   = await fetchPreview( editExpr.trim(), postId );
-			if ( ! isCancelled ) {
-				setLivePreview( view );
-			}
-		}, 300 ); // 300ms debounce
-		
-		return () => {
-			isCancelled = true;
-			clearTimeout( id );
-		};
-	}, [ editExpr, isActive ] );
-
-	useEffect( () => {
-		if ( ! isActive ) setPopoverOpen( false );
 	}, [ isActive ] );
 
-	useEffect( () => {
-		if ( ! popoverOpen || ! inputRef.current ) return;
-		const id = setTimeout( () => inputRef.current?.focus(), POPOVER_FOCUS_DELAY );
-		return () => clearTimeout( id );
-	}, [ popoverOpen ] );
-
-	const applyUpdate = useCallback( () => {
-		const expr = editExpr.trim();
+	// ── Build apply/remove callbacks that the sidebar calls ──
+	const applyUpdate = useCallback( ( exprOverride ) => {
+		const expr = ( exprOverride ?? select( STORE_NAME ).getExpr() ).trim();
 		if ( ! expr ) return;
 
-		const postId = window.wp.data.select( 'core/editor' )?.getCurrentPostId?.() || 0;
+		const postId = select( 'core/editor' )?.getCurrentPostId?.() || 0;
 		const cached = getCachedView( expr, postId );
 		const attrs  = { expr, contentEditable: 'false' };
 
-		// Include cached view so the format data survives React re-renders.
 		if ( cached !== undefined ) {
 			attrs.view = cached;
 		}
 
-		const next   = applyFormat( value, {
+		const next = applyFormat( value, {
 			type:       'vector/expression',
 			attributes: attrs,
 		} );
 		next.start = next.end;
 		onChange( next );
-	}, [ editExpr, value, onChange ] );
+	}, [ value, onChange ] );
 
 	const applyRemove = useCallback( () => {
 		const formats = value.formats ?? [];
@@ -614,7 +409,6 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 
 		const hasFormat = ( i ) => formats[ i ]?.some( ( f ) => f.type === 'vector/expression' );
 
-		// If cursor is just past the end of the token, check one position back.
 		if ( pivot > 0 && ! hasFormat( pivot ) && hasFormat( pivot - 1 ) ) pivot--;
 
 		if ( ! hasFormat( pivot ) ) {
@@ -630,8 +424,8 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 		onChange( concat( slice( value, 0, rangeStart ), slice( value, rangeEnd ) ) );
 	}, [ value, onChange ] );
 
-	const dismissPopover = useCallback( () => {
-		setPopoverOpen( false );
+	const dismiss = useCallback( () => {
+		storeDispatch.clearActiveToken();
 		const el   = contentRef?.current;
 		const span = el?.querySelector( 'span[data-ve-active]' );
 		if ( el && span ) {
@@ -644,58 +438,49 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 			sel.addRange( range );
 		}
 		el?.focus();
-	}, [ contentRef ] );
+	}, [ contentRef, storeDispatch ] );
 
-	const NativeToolbarButton = (
+	dismissRef.current = dismiss;
+
+	// Publish callbacks for the sidebar tab to call.
+	setTokenRefs( { applyUpdate, applyRemove, dismiss } );
+
+	// ── Debounced live preview ──
+	const storeExpr = useSelect( ( sel ) => sel( STORE_NAME ).getExpr(), [] );
+	useEffect( () => {
+		if ( ! isActive || ! storeExpr.trim() ) {
+			if ( ! storeExpr.trim() ) storeDispatch.setPreview( null );
+			return;
+		}
+
+		let cancelled = false;
+		const id = setTimeout( async () => {
+			const postId = select( 'core/editor' )?.getCurrentPostId?.() || 0;
+			const view   = await fetchPreview( storeExpr.trim(), postId );
+			if ( ! cancelled ) storeDispatch.setPreview( view );
+		}, 300 );
+
+		return () => { cancelled = true; clearTimeout( id ); };
+	}, [ storeExpr, isActive ] );
+
+	useTokenEventListeners( contentRef, {
+		isActiveRef, tokenActiveRef,
+		dismissRef, openSidebarRef,
+	} );
+
+	// Toolbar button only — no popover.
+	return (
 		<RichTextToolbarButton
 			icon={ () => <Icon icon="database" /> }
 			title={ __( 'Edit Vector Expression', 'vector-expressions' ) }
-			onClick={ () => setPopoverOpen( true ) }
+			onClick={ openSidebar }
 			isActive={ isActive }
 		/>
-	);
-
-	if ( ! popoverOpen ) return NativeToolbarButton;
-
-	// Build a dynamic virtual anchor that ALWAYS queries the live DOM for the active span.
-	// This prevents "Cannot read properties of null" crashes caused by passing detached React
-	// nodes to Popover (which happens constantly during rich text parsing).
-	const dynamicAnchor = {
-		getBoundingClientRect: () => {
-			const activeSpan = contentRef?.current?.querySelector( 'span[data-ve-active]' );
-			if ( activeSpan ) {
-				return activeSpan.getBoundingClientRect();
-			}
-			// Fallback to Gutenberg's native virtual anchor
-			if ( virtualAnchor && typeof virtualAnchor.getBoundingClientRect === 'function' ) {
-				return virtualAnchor.getBoundingClientRect();
-			}
-			// Ultimate fallback to prevent crash
-			return new window.DOMRect();
-		},
-		ownerDocument: contentRef?.current?.ownerDocument || document,
-	};
-
-	return (
-		<>
-			{ NativeToolbarButton }
-			<TokenPopover
-				anchor={ dynamicAnchor }
-				editExpr={ editExpr }
-				setEdit={ setEdit }
-				previewObj={ livePreview }
-				onUpdate={ applyUpdate }
-				onRemove={ applyRemove }
-				onDismiss={ dismissPopover }
-				inputRef={ inputRef }
-			/>
-		</>
 	);
 };
 
 /**
  * Register the `vector/expression` rich-text format type.
- * Called once from the editor entry point.
  */
 export const registerExpressionFormat = () => {
 	registerFormatType( 'vector/expression', {
@@ -713,19 +498,15 @@ export const registerExpressionFormat = () => {
 			const { start, text } = value;
 			const { applyFormat } = window.wp.richText;
 
-			// Check if the user just typed the closing bracket `}`
 			if ( text.substring( start - 2, start ) !== '}}' ) {
 				return value;
 			}
 
-			// Find the nearest opening bracket BEFORE the closing bracket
 			const openingIndex = text.lastIndexOf( '{{', start - 2 );
 
 			if ( openingIndex !== -1 ) {
-				// Make sure there are no other closing brackets between the open and close
 				const intermediateClose = text.indexOf( '}}', openingIndex + 2 );
 				
-				// Ensure the intermediate close is exactly the one we just typed, meaning no nested broken pairs
 				if ( intermediateClose === start - 2 ) {
 					return applyFormat(
 						value,

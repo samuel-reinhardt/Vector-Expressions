@@ -236,24 +236,9 @@
       if (!attrName) return;
       const editorPostId = ((_b2 = (_a2 = select("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
       if (postId === editorPostId) return;
-      const root = getEditorRoot();
-      if (!root) return;
-      const scope = root.querySelector(`.post-${postId}`) || root;
-      applyViewsDOM(postId, clientId);
-      let isStamping = false;
-      const observer = new MutationObserver(() => {
-        if (isStamping) return;
-        const unstamped = scope.querySelector(
-          "span.ve-expr-token:not([data-ve-view])"
-        );
-        if (!unstamped) return;
-        isStamping = true;
-        applyViewsDOM(postId, clientId);
-        isStamping = false;
-      });
-      observer.observe(scope, { childList: true, subtree: true });
-      return () => observer.disconnect();
-    }, [postId, clientId]);
+      const id = requestAnimationFrame(() => applyViewsDOM(postId, clientId));
+      return () => cancelAnimationFrame(id);
+    });
   };
   var applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
     const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, expr) => {
@@ -324,32 +309,6 @@
   var ICON_FILTER = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <path d="M4 4h12l-4.5 5.5v6.5l-3 2v-8.5l-4.5-5.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`;
-  var VE_ROOTS = [
-    {
-      label: "Post",
-      description: "Current post data \u2014 title, date, meta\u2026",
-      icon: ICON_POST,
-      prefix: "post"
-    },
-    {
-      label: "User",
-      description: "Logged-in user \u2014 name, email, role\u2026",
-      icon: ICON_USER,
-      prefix: "user"
-    },
-    {
-      label: "Site",
-      description: "Site-wide settings \u2014 name, URL, language\u2026",
-      icon: ICON_SITE,
-      prefix: "site"
-    },
-    {
-      label: "Patterns",
-      description: "Ready-made expressions for common tasks",
-      icon: ICON_PATTERN,
-      prefix: "_pattern"
-    }
-  ];
   var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
   var VE_COMPLETIONS = [
     // ── User ──────────────────────────────────────────────────────────────────
@@ -683,7 +642,7 @@
   var getCompletions = () => {
     var _a2, _b2;
     return ((_b2 = (_a2 = window.wp) == null ? void 0 : _a2.hooks) == null ? void 0 : _b2.applyFilters) ? window.wp.hooks.applyFilters(
-      "vector_expressions/editor/completions",
+      "vector_expressions.editor.completions",
       VE_COMPLETIONS
     ) : VE_COMPLETIONS;
   };
@@ -696,7 +655,6 @@
     "core/verse"
   ]);
   var TOKEN_REGEX = /(<span\b[^>]*\bclass="ve-expr-token"[^>]*>[\s\S]*?<\/span>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
-  var POPOVER_FOCUS_DELAY = 50;
 
   // modules/editor/auto-textarea.jsx
   var {
@@ -743,18 +701,82 @@
     );
   };
 
+  // modules/editor/expression-store.js
+  var { createReduxStore, register } = window.wp.data;
+  var STORE_NAME = "vector-expressions/active-token";
+  var DEFAULT_STATE = {
+    /** @type {string} Current expression text being edited. */
+    expr: "",
+    /** @type {boolean} Whether a token is currently being edited. */
+    active: false,
+    /** @type {object|null} Live preview result { valid, preview }. */
+    preview: null
+  };
+  var refs = {
+    applyUpdate: null,
+    applyRemove: null,
+    dismiss: null
+  };
+  var store = createReduxStore(STORE_NAME, {
+    reducer(state = DEFAULT_STATE, action) {
+      switch (action.type) {
+        case "SET_ACTIVE":
+          return { ...state, active: true, expr: action.expr, preview: null };
+        case "UPDATE_EXPR":
+          return { ...state, expr: action.expr };
+        case "SET_PREVIEW":
+          return { ...state, preview: action.preview };
+        case "CLEAR":
+          return { ...DEFAULT_STATE };
+        default:
+          return state;
+      }
+    },
+    actions: {
+      setActiveToken(expr) {
+        return { type: "SET_ACTIVE", expr };
+      },
+      updateExpr(expr) {
+        return { type: "UPDATE_EXPR", expr };
+      },
+      setPreview(preview) {
+        return { type: "SET_PREVIEW", preview };
+      },
+      clearActiveToken() {
+        return { type: "CLEAR" };
+      }
+    },
+    selectors: {
+      isTokenActive(state) {
+        return state.active;
+      },
+      getExpr(state) {
+        return state.expr;
+      },
+      getPreview(state) {
+        return state.preview;
+      }
+    }
+  });
+  register(store);
+  var setTokenRefs = ({ applyUpdate, applyRemove, dismiss }) => {
+    refs.applyUpdate = applyUpdate;
+    refs.applyRemove = applyRemove;
+    refs.dismiss = dismiss;
+  };
+  var getTokenRefs = () => refs;
+
   // modules/editor/expression-format.jsx
   var {
     useState,
     useEffect,
     useLayoutEffect: useLayoutEffect2,
     useRef: useRef2,
-    useCallback: useCallback2
+    useCallback: useCallback2,
+    useMemo
   } = window.wp.element;
   var {
-    Popover,
     Button,
-    TabPanel,
     Icon
   } = window.wp.components;
   var { __ } = window.wp.i18n;
@@ -766,22 +788,22 @@
     slice,
     useAnchor
   } = window.wp.richText;
-  var { select: select2 } = window.wp.data;
+  var { select: select2, useSelect, useDispatch } = window.wp.data;
   var { RichTextToolbarButton } = window.wp.blockEditor;
-  var useActiveTokenState = (isActive, contentRef, popoverOpen) => {
+  var useActiveTokenState = (isActive, contentRef, sidebarActive) => {
     useEffect(() => {
       const el2 = contentRef == null ? void 0 : contentRef.current;
       if (!el2) return;
       if (isActive) {
         const span = el2.querySelector("span.ve-expr-token[data-rich-text-format-boundary]");
         if (span) span.setAttribute("data-ve-active", "");
-      } else if (!popoverOpen) {
+      } else if (!sidebarActive) {
         el2.querySelectorAll("span.ve-expr-token").forEach((m) => {
           m.removeAttribute("data-ve-active");
           m.removeAttribute("data-rich-text-format-boundary");
         });
       }
-    }, [isActive, contentRef, popoverOpen]);
+    }, [isActive, contentRef, sidebarActive]);
   };
   var getTokenSpan = (n, el2) => {
     let cur = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
@@ -799,18 +821,18 @@
     sel.removeAllRanges();
     sel.addRange(range);
   };
-  var useTokenEventListeners = (contentRef, refs) => {
+  var useTokenEventListeners = (contentRef, refs2) => {
     useEffect(() => {
       let interval = null;
       let el2 = null;
       const onKeyDown = (evt) => {
-        var _a2, _b2;
+        var _a2, _b2, _c2, _d2;
         if (!el2) return;
         const { key } = evt;
-        if (key === "Escape" && refs.popoverOpenRef.current) {
+        if (key === "Escape" && refs2.tokenActiveRef.current) {
           evt.preventDefault();
           evt.stopPropagation();
-          (_b2 = (_a2 = refs.dismissPopoverRef).current) == null ? void 0 : _b2.call(_a2);
+          (_b2 = (_a2 = refs2.dismissRef).current) == null ? void 0 : _b2.call(_a2);
           return;
         }
         if (key === "Tab") {
@@ -840,17 +862,17 @@
           }
         }
         if (key === "Enter" || key === " ") {
-          if (refs.isActiveRef.current) {
+          if (refs2.isActiveRef.current) {
             const inside = getTokenSpan(node, el2);
             if (inside || !range.collapsed) {
               evt.preventDefault();
               evt.stopPropagation();
-              refs.setPopoverOpenRef.current(true);
+              (_d2 = (_c2 = refs2.openSidebarRef).current) == null ? void 0 : _d2.call(_c2);
             }
             return;
           }
         }
-        if (refs.isActiveRef.current && !refs.popoverOpenRef.current && key.length === 1 && !evt.ctrlKey && !evt.metaKey) {
+        if (refs2.isActiveRef.current && !refs2.tokenActiveRef.current && key.length === 1 && !evt.ctrlKey && !evt.metaKey) {
           const span = getTokenSpan(node, el2);
           if (span) {
             const isStart = (node.nodeType === Node.TEXT_NODE || node === span) && range.startOffset === 0;
@@ -880,7 +902,7 @@
       };
     }, []);
   };
-  var VE_PATTERNS = [
+  var VE_PATTERNS_DEFAULT = [
     { expr: "post.title | default 'Untitled'", label: "Post title with fallback" },
     { expr: "user.is_logged_in ? user.name : 'Guest'", label: "Greeting (logged in)" },
     { expr: "post.date | date 'F j, Y'", label: "Formatted publish date" },
@@ -890,278 +912,132 @@
     { expr: "post.author_name", label: "Post author name" },
     { expr: "post.excerpt | default post.content", label: "Excerpt or full content" }
   ];
-  var getSuggestions = (expr) => {
-    const trimmed = expr.trim();
-    if (trimmed === "") return VE_ROOTS;
-    if (trimmed === "_pattern.") return VE_PATTERNS;
-    const lower = trimmed.toLowerCase();
-    if (lower.includes("|")) {
-      return getCompletions().filter((o) => o.prefix === "|").slice(0, 8);
-    }
-    const completions = getCompletions();
-    const byExpr = completions.filter((o) => o.expr.toLowerCase().startsWith(lower));
-    const byLabel = completions.filter((o) => !o.expr.toLowerCase().startsWith(lower) && o.label.toLowerCase().includes(lower));
-    return [...byExpr, ...byLabel].slice(0, 8);
+  var getPatterns = () => {
+    const { applyFilters: applyFilters2 } = window.wp.hooks;
+    return applyFilters2 ? applyFilters2("vectorExpressions.suggestions.patterns", VE_PATTERNS_DEFAULT) : VE_PATTERNS_DEFAULT;
   };
-  var ExpressionSuggestions = ({ expr, onSelect, inputRef }) => {
-    const suggestions = getSuggestions(expr);
-    const hasSpecificSuggestions = suggestions.length > 0 && expr.trim() !== "";
+  var getCategories = (completions) => {
+    const seen = /* @__PURE__ */ new Map();
+    for (const item of completions) {
+      const cat = item.category;
+      if (!cat || cat === "Pattern") continue;
+      if (!seen.has(cat)) {
+        seen.set(cat, { key: cat.toLowerCase(), label: cat, items: [] });
+      }
+      seen.get(cat).items.push(item);
+    }
+    const cats = [...seen.values()];
+    cats.push({ key: "pattern", label: __("Patterns", "vector-expressions"), items: getPatterns() });
+    const { applyFilters: applyFilters2 } = window.wp.hooks;
+    return applyFilters2 ? applyFilters2("vectorExpressions.suggestions.categories", cats, completions) : cats;
+  };
+  var ExpressionSuggestions = ({ expr, onSelect }) => {
+    const [search, setSearch] = useState("");
+    const [open, setOpen] = useState({});
     const completions = getCompletions();
-    const suggestionsGrouped = {
-      common: suggestions,
-      post: completions.filter((s) => s.category === "Post"),
-      user: completions.filter((s) => s.category === "User"),
-      site: completions.filter((s) => s.category === "Site"),
-      modifier: completions.filter((s) => s.category === "Modifier")
+    const categories = getCategories(completions);
+    const query = search.toLowerCase().trim();
+    const searching = query.length > 0;
+    const toggle = (key) => {
+      setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
     };
-    const renderChip = (s) => {
-      const root = "prefix" in s && !("category" in s) && !("label" in s && "expr" in s && !("prefix" in s));
-      const pattern = !root && "label" in s && "expr" in s && !("prefix" in s) && !("category" in s);
-      const insertExpr = root ? s.prefix === "_pattern" ? "_pattern." : s.prefix + "." : s.expr;
-      const chipLabel = root ? s.label : pattern ? s.label : s.label.replace(/^(Post|User|Site|Modifier|Pattern):\s*/, "");
-      return /* @__PURE__ */ wp.element.createElement(
-        Button,
-        {
-          key: insertExpr + chipLabel,
-          variant: "secondary",
-          onMouseDown: (e) => e.preventDefault(),
-          onClick: (e) => {
-            e.preventDefault();
-            let newValue = insertExpr;
-            if (s.category === "Modifier") {
-              let appended = expr.trim();
-              if (!appended.endsWith("|") && appended.length > 0) {
-                appended += " ";
-              }
-              newValue = appended + insertExpr;
-            }
-            onSelect(newValue);
-            setTimeout(() => {
-              const el2 = document.querySelector(".ve-expr-input textarea");
-              if (el2) el2.focus();
-            }, 0);
-          },
-          style: { textAlign: "left", justifyContent: "flex-start", padding: "8px 12px", whiteSpace: "normal", height: "auto", lineHeight: "1.3" }
-        },
-        /* @__PURE__ */ wp.element.createElement("span", { style: { fontSize: "13px" } }, chipLabel)
+    const filterItems = (items) => {
+      if (!searching) return items;
+      return items.filter(
+        (s) => (s.expr || "").toLowerCase().includes(query) || (s.label || "").toLowerCase().includes(query)
       );
     };
-    const tabs = [
-      {
-        name: "suggestions",
-        title: hasSpecificSuggestions ? __("Suggestions", "vector-expressions") : __("Common", "vector-expressions"),
-        className: "ve-tab-suggestions"
-      },
-      {
-        name: "post",
-        title: __("Post", "vector-expressions"),
-        className: "ve-tab-post"
-      },
-      {
-        name: "user",
-        title: __("User", "vector-expressions"),
-        className: "ve-tab-user"
-      },
-      {
-        name: "modifiers",
-        title: __("Modifiers", "vector-expressions"),
-        className: "ve-tab-modifiers"
-      },
-      {
-        name: "patterns",
-        title: __("Patterns", "vector-expressions"),
-        className: "ve-tab-patterns"
-      }
-    ];
-    return /* @__PURE__ */ wp.element.createElement("div", { style: { marginTop: "16px" } }, /* @__PURE__ */ wp.element.createElement(
-      TabPanel,
-      {
-        className: "ve-expression-tabs",
-        activeClass: "is-active",
-        tabs
-      },
-      (tab) => {
-        const renderItems = (items, isGrid) => /* @__PURE__ */ wp.element.createElement("div", { style: {
-          display: isGrid ? "grid" : "flex",
-          flexDirection: isGrid ? "row" : "column",
-          gridTemplateColumns: isGrid ? "1fr 1fr" : "none",
-          gap: "8px",
-          maxHeight: "200px",
-          overflowY: "auto",
-          paddingTop: "16px",
-          paddingBottom: "4px"
-        } }, items.map(renderChip));
-        switch (tab.name) {
-          case "post":
-            return renderItems(suggestionsGrouped.post, true);
-          case "user":
-            return renderItems(suggestionsGrouped.user, true);
-          case "modifiers":
-            return renderItems(suggestionsGrouped.modifier, false);
-          case "patterns":
-            return renderItems(VE_PATTERNS, false);
-          default:
-            return renderItems(suggestionsGrouped.common, false);
+    const handleSelect = (s) => {
+      const isPattern = !("category" in s) && !("prefix" in s);
+      const insertExpr = s.expr;
+      let newValue = insertExpr;
+      if (s.category === "Modifier") {
+        let appended = expr.trim();
+        if (!appended.endsWith("|") && appended.length > 0) {
+          appended += " ";
         }
+        newValue = appended + insertExpr;
       }
-    ));
+      onSelect(newValue);
+    };
+    return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-suggestions" }, /* @__PURE__ */ wp.element.createElement("div", { className: "ve-suggestions-search" }, /* @__PURE__ */ wp.element.createElement(
+      "input",
+      {
+        type: "text",
+        className: "components-text-control__input",
+        placeholder: __("Filter suggestions\u2026", "vector-expressions"),
+        value: search,
+        onChange: (e) => setSearch(e.target.value)
+      }
+    )), categories.map((cat) => {
+      const filtered = filterItems(cat.items);
+      if (searching && filtered.length === 0) return null;
+      const isOpen = searching || !!open[cat.key];
+      return /* @__PURE__ */ wp.element.createElement("div", { key: cat.key, className: "ve-suggestions-group" }, /* @__PURE__ */ wp.element.createElement(
+        "button",
+        {
+          className: "ve-suggestions-header" + (isOpen ? " is-open" : ""),
+          onClick: () => !searching && toggle(cat.key),
+          "aria-expanded": isOpen
+        },
+        /* @__PURE__ */ wp.element.createElement("span", null, cat.label),
+        /* @__PURE__ */ wp.element.createElement("span", { className: "ve-suggestions-count" }, filtered.length),
+        !searching && /* @__PURE__ */ wp.element.createElement("span", { className: "ve-suggestions-arrow" }, isOpen ? "\u25B2" : "\u25BC")
+      ), isOpen && /* @__PURE__ */ wp.element.createElement("div", { className: "ve-suggestions-items" }, filtered.map((s) => /* @__PURE__ */ wp.element.createElement(
+        Button,
+        {
+          key: s.expr + (s.label || ""),
+          variant: "secondary",
+          size: "small",
+          className: "ve-suggestion-chip",
+          onMouseDown: (e) => e.preventDefault(),
+          onClick: () => handleSelect(s)
+        },
+        (s.label || s.expr).replace(/^(Post|User|Site|Modifier):\s*/, "")
+      ))));
+    }));
   };
-  var TokenPopover = ({ anchor, getFallbackAnchor, editExpr, setEdit, onUpdate, onRemove, onDismiss, inputRef, previewObj }) => /* @__PURE__ */ wp.element.createElement(
-    Popover,
-    {
-      anchor: anchor || { getBoundingClientRect: getFallbackAnchor },
-      placement: "bottom",
-      className: "ve-pill-popover",
-      focusOnMount: false,
-      onKeyDown: (evt) => {
-        if (evt.key === "Escape") {
-          evt.preventDefault();
-          evt.stopPropagation();
-          onDismiss();
-        }
-      }
-    },
-    /* @__PURE__ */ wp.element.createElement("div", { className: "ve-expression-builder", style: { padding: "16px", width: "420px", boxSizing: "border-box" } }, /* @__PURE__ */ wp.element.createElement("div", { style: { display: "flex", flexDirection: "column", gap: "8px" } }, /* @__PURE__ */ wp.element.createElement("label", { style: { fontSize: "13px", fontWeight: 600 } }, __("Vector Expression", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
-      AutoTextarea,
-      {
-        className: "ve-expr-input ve-class-textarea",
-        value: editExpr,
-        onChange: (val) => setEdit(val),
-        placeholder: "user.is_logged_in",
-        inputRef,
-        onKeyDown: (e) => {
-          if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
-            onDismiss();
-            return;
-          }
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            onUpdate();
-            onDismiss();
-          }
-        }
-      }
-    )), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-live-preview", style: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: "8px",
-      marginTop: "12px",
-      background: !previewObj || !previewObj.valid ? "#fcf0f1" : "#f0f0f0",
-      padding: "12px",
-      borderRadius: "4px",
-      border: "1px solid " + (!previewObj || !previewObj.valid ? "#cc1818" : "#e0e0e0")
-    } }, /* @__PURE__ */ wp.element.createElement("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: "#1e1e1e", fontSize: "12px" } }, /* @__PURE__ */ wp.element.createElement("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" }, /* @__PURE__ */ wp.element.createElement("path", { d: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" }), /* @__PURE__ */ wp.element.createElement("circle", { cx: "12", cy: "12", r: "3" })), /* @__PURE__ */ wp.element.createElement("span", null, __("Preview", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("code", { style: {
-      color: !previewObj || !previewObj.valid ? "#cc1818" : "#39b074",
-      maxWidth: "200px",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap",
-      fontSize: "14px",
-      fontFamily: "monospace"
-    } }, !previewObj || !previewObj.valid ? editExpr ? (previewObj == null ? void 0 : previewObj.preview) || __("Invalid syntax", "vector-expressions") : "" : String(previewObj.preview))), /* @__PURE__ */ wp.element.createElement(
-      ExpressionSuggestions,
-      {
-        expr: editExpr,
-        onSelect: setEdit,
-        inputRef
-      }
-    ), /* @__PURE__ */ wp.element.createElement("footer", { style: { display: "flex", justifyContent: "space-between", marginTop: "16px" } }, /* @__PURE__ */ wp.element.createElement(
-      Button,
-      {
-        variant: "secondary",
-        isDestructive: true,
-        onClick: () => {
-          onRemove();
-          onDismiss();
-        }
-      },
-      __("Remove", "vector-expressions")
-    ), /* @__PURE__ */ wp.element.createElement(
-      Button,
-      {
-        variant: "primary",
-        onClick: () => {
-          onUpdate();
-          onDismiss();
-        }
-      },
-      __("Apply", "vector-expressions")
-    )))
-  );
   var ExpressionEdit = ({ isActive, activeAttributes, value, onChange, contentRef }) => {
-    var _a2;
-    const [editExpr, setEdit] = useState("");
-    const [popoverOpen, setPopoverOpen] = useState(false);
-    const [livePreview, setLivePreview] = useState(null);
-    const inputRef = useRef2(null);
     const isActiveRef = useRef2(false);
-    const popoverOpenRef = useRef2(false);
-    const dismissPopoverRef = useRef2(null);
-    const setPopoverOpenRef = useRef2(null);
-    setPopoverOpenRef.current = setPopoverOpen;
-    popoverOpenRef.current = popoverOpen;
-    const virtualAnchor = useAnchor({
-      editableContentElement: contentRef.current,
-      settings: { tagName: "span", className: "ve-expr-token" }
-    });
+    const tokenActiveRef = useRef2(false);
+    const dismissRef = useRef2(null);
+    const openSidebarRef = useRef2(null);
+    const storeDispatch = useDispatch(STORE_NAME);
+    const sidebarDispatch = useDispatch("core/edit-post");
+    const isTokenStoreActive = useSelect((sel) => sel(STORE_NAME).isTokenActive(), []);
+    tokenActiveRef.current = isTokenStoreActive;
     useLayoutEffect2(() => {
       isActiveRef.current = isActive;
     }, [isActive]);
-    useActiveTokenState(isActive, contentRef, popoverOpen);
-    useTokenEventListeners(contentRef, {
-      isActiveRef,
-      popoverOpenRef,
-      dismissPopoverRef,
-      setPopoverOpenRef
-    });
+    useActiveTokenState(isActive, contentRef, isTokenStoreActive);
+    const openSidebar = useCallback2(() => {
+      const expr = (activeAttributes == null ? void 0 : activeAttributes.expr) || "";
+      storeDispatch.setActiveToken(expr);
+      if (sidebarDispatch.openGeneralSidebar) {
+        sidebarDispatch.openGeneralSidebar("vector-expressions/vector-expressions");
+      }
+    }, [activeAttributes == null ? void 0 : activeAttributes.expr, storeDispatch, sidebarDispatch]);
+    openSidebarRef.current = openSidebar;
     useEffect(() => {
-      if (isActive && !popoverOpen) {
-        setPopoverOpen(true);
+      if (isActive) {
+        openSidebar();
       }
     }, [isActive]);
     useEffect(() => {
       if (isActive && (activeAttributes == null ? void 0 : activeAttributes.expr)) {
-        setEdit(activeAttributes.expr);
+        storeDispatch.updateExpr(activeAttributes.expr);
       }
-    }, [isActive, popoverOpen, activeAttributes == null ? void 0 : activeAttributes.expr]);
+    }, [isActive, activeAttributes == null ? void 0 : activeAttributes.expr]);
     useEffect(() => {
-      if (!isActive || !editExpr.trim()) {
-        if (!editExpr.trim()) setLivePreview(null);
-        return;
+      if (!isActive) {
+        storeDispatch.clearActiveToken();
       }
-      let isCancelled = false;
-      const id = setTimeout(async () => {
-        var _a3, _b2;
-        const postId = ((_b2 = (_a3 = select2("core/editor")) == null ? void 0 : _a3.getCurrentPostId) == null ? void 0 : _b2.call(_a3)) || 0;
-        const view = await fetchPreview(editExpr.trim(), postId);
-        if (!isCancelled) {
-          setLivePreview(view);
-        }
-      }, 300);
-      return () => {
-        isCancelled = true;
-        clearTimeout(id);
-      };
-    }, [editExpr, isActive]);
-    useEffect(() => {
-      if (!isActive) setPopoverOpen(false);
     }, [isActive]);
-    useEffect(() => {
-      if (!popoverOpen || !inputRef.current) return;
-      const id = setTimeout(() => {
-        var _a3;
-        return (_a3 = inputRef.current) == null ? void 0 : _a3.focus();
-      }, POPOVER_FOCUS_DELAY);
-      return () => clearTimeout(id);
-    }, [popoverOpen]);
-    const applyUpdate = useCallback2(() => {
-      var _a3, _b2;
-      const expr = editExpr.trim();
+    const applyUpdate = useCallback2((exprOverride) => {
+      var _a2, _b2;
+      const expr = (exprOverride != null ? exprOverride : select2(STORE_NAME).getExpr()).trim();
       if (!expr) return;
-      const postId = ((_b2 = (_a3 = window.wp.data.select("core/editor")) == null ? void 0 : _a3.getCurrentPostId) == null ? void 0 : _b2.call(_a3)) || 0;
+      const postId = ((_b2 = (_a2 = select2("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
       const cached = getCachedView(expr, postId);
       const attrs = { expr, contentEditable: "false" };
       if (cached !== void 0) {
@@ -1173,14 +1049,14 @@
       });
       next.start = next.end;
       onChange(next);
-    }, [editExpr, value, onChange]);
+    }, [value, onChange]);
     const applyRemove = useCallback2(() => {
-      var _a3;
-      const formats = (_a3 = value.formats) != null ? _a3 : [];
+      var _a2;
+      const formats = (_a2 = value.formats) != null ? _a2 : [];
       let pivot = value.start;
       const hasFormat = (i) => {
-        var _a4;
-        return (_a4 = formats[i]) == null ? void 0 : _a4.some((f) => f.type === "vector/expression");
+        var _a3;
+        return (_a3 = formats[i]) == null ? void 0 : _a3.some((f) => f.type === "vector/expression");
       };
       if (pivot > 0 && !hasFormat(pivot) && hasFormat(pivot - 1)) pivot--;
       if (!hasFormat(pivot)) {
@@ -1193,8 +1069,8 @@
       while (rangeEnd < formats.length && hasFormat(rangeEnd)) rangeEnd++;
       onChange(concat(slice(value, 0, rangeStart), slice(value, rangeEnd)));
     }, [value, onChange]);
-    const dismissPopover = useCallback2(() => {
-      setPopoverOpen(false);
+    const dismiss = useCallback2(() => {
+      storeDispatch.clearActiveToken();
       const el2 = contentRef == null ? void 0 : contentRef.current;
       const span = el2 == null ? void 0 : el2.querySelector("span[data-ve-active]");
       if (el2 && span) {
@@ -1207,44 +1083,42 @@
         sel.addRange(range);
       }
       el2 == null ? void 0 : el2.focus();
-    }, [contentRef]);
-    const NativeToolbarButton = /* @__PURE__ */ wp.element.createElement(
+    }, [contentRef, storeDispatch]);
+    dismissRef.current = dismiss;
+    setTokenRefs({ applyUpdate, applyRemove, dismiss });
+    const storeExpr = useSelect((sel) => sel(STORE_NAME).getExpr(), []);
+    useEffect(() => {
+      if (!isActive || !storeExpr.trim()) {
+        if (!storeExpr.trim()) storeDispatch.setPreview(null);
+        return;
+      }
+      let cancelled = false;
+      const id = setTimeout(async () => {
+        var _a2, _b2;
+        const postId = ((_b2 = (_a2 = select2("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
+        const view = await fetchPreview(storeExpr.trim(), postId);
+        if (!cancelled) storeDispatch.setPreview(view);
+      }, 300);
+      return () => {
+        cancelled = true;
+        clearTimeout(id);
+      };
+    }, [storeExpr, isActive]);
+    useTokenEventListeners(contentRef, {
+      isActiveRef,
+      tokenActiveRef,
+      dismissRef,
+      openSidebarRef
+    });
+    return /* @__PURE__ */ wp.element.createElement(
       RichTextToolbarButton,
       {
         icon: () => /* @__PURE__ */ wp.element.createElement(Icon, { icon: "database" }),
         title: __("Edit Vector Expression", "vector-expressions"),
-        onClick: () => setPopoverOpen(true),
+        onClick: openSidebar,
         isActive
       }
     );
-    if (!popoverOpen) return NativeToolbarButton;
-    const dynamicAnchor = {
-      getBoundingClientRect: () => {
-        var _a3;
-        const activeSpan = (_a3 = contentRef == null ? void 0 : contentRef.current) == null ? void 0 : _a3.querySelector("span[data-ve-active]");
-        if (activeSpan) {
-          return activeSpan.getBoundingClientRect();
-        }
-        if (virtualAnchor && typeof virtualAnchor.getBoundingClientRect === "function") {
-          return virtualAnchor.getBoundingClientRect();
-        }
-        return new window.DOMRect();
-      },
-      ownerDocument: ((_a2 = contentRef == null ? void 0 : contentRef.current) == null ? void 0 : _a2.ownerDocument) || document
-    };
-    return /* @__PURE__ */ wp.element.createElement(wp.element.Fragment, null, NativeToolbarButton, /* @__PURE__ */ wp.element.createElement(
-      TokenPopover,
-      {
-        anchor: dynamicAnchor,
-        editExpr,
-        setEdit,
-        previewObj: livePreview,
-        onUpdate: applyUpdate,
-        onRemove: applyRemove,
-        onDismiss: dismissPopover,
-        inputRef
-      }
-    ));
   };
   var registerExpressionFormat = () => {
     registerFormatType("vector/expression", {
@@ -1304,12 +1178,12 @@
     if (q.includes("|")) {
       return completions.filter((o) => o.prefix === "|");
     }
-    if (q.startsWith("post"))
-      return completions.filter((o) => o.prefix === "post");
-    if (q.startsWith("user"))
-      return completions.filter((o) => o.prefix === "user");
-    if (q.startsWith("site"))
-      return completions.filter((o) => o.prefix === "site");
+    const prefixes = new Set(completions.map((o) => o.prefix).filter(Boolean));
+    for (const prefix of prefixes) {
+      if (prefix !== "|" && q.startsWith(prefix)) {
+        return completions.filter((o) => o.prefix === prefix);
+      }
+    }
     return completions.filter(
       (o) => o.label.toLowerCase().includes(q) || o.expr.toLowerCase().includes(q)
     );
@@ -1394,37 +1268,21 @@
   var registerAutocompleter = () => {
     addFilter(
       "editor.Autocomplete.completers",
-      "vector-expressions/autocompleter",
+      "vector-expressions.autocompleter",
       (completers) => [...completers, buildCompleter()]
     );
   };
-
-  // modules/editor/logo.jsx
-  var VectorArrowLogo = () => /* @__PURE__ */ wp.element.createElement(
-    "svg",
-    {
-      width: "16",
-      height: "16",
-      viewBox: "-376 -15 92 126",
-      "aria-hidden": "true",
-      focusable: "false",
-      className: "ve-logo"
-    },
-    /* @__PURE__ */ wp.element.createElement("g", { style: { fill: "#0d6632" } }, /* @__PURE__ */ wp.element.createElement("path", { d: "M -372.38427,54.856239 V 40.319598 q 5.39067,-0.242277 7.93459,-2.119927 2.60448,-1.877649 3.937,-5.875225 1.3931,-3.997576 1.3931,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09024,-4.4215615 3.45245,-7.0260429 2.42277,-2.6650507 7.02604,-4.3609921 4.66384,-1.695941 13.38582,-1.695941 h 3.21018 v 14.53664 q -6.48092,0 -8.47971,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48455,6.117502 -3.33131,10.963049 -2.11993,3.573591 -7.32889,6.965474 4.42156,2.543912 7.02604,6.480919 2.60448,3.876437 3.45245,9.872801 0.36342,2.604481 0.84797,16.959414 0.18171,5.269532 0.66627,6.541488 0.7874,1.877649 2.90732,2.846759 2.1805,0.969109 8.84313,0.969109 v 14.476072 h -3.21018 q -8.78255,0 -13.0224,-1.45366 -4.23986,-1.3931 -6.90491,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15081,-4.179284 -1.15081,-14.476071 0,-11.508173 -1.27196,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }), /* @__PURE__ */ wp.element.createElement("path", { d: "M -329.85728,54.856239 V 40.319598 q 5.39067,-0.242277 7.93458,-2.119927 2.60448,-1.877649 3.93701,-5.875225 1.39309,-3.997576 1.39309,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09025,-4.4215615 3.45245,-7.0260429 2.42278,-2.6650507 7.02605,-4.3609921 4.66383,-1.695941 13.38582,-1.695941 h 3.21017 v 14.53664 q -6.48092,0 -8.4797,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48456,6.117502 -3.33132,10.963049 -2.11992,3.573591 -7.32889,6.965474 4.42157,2.543912 7.02605,6.480919 2.60448,3.876437 3.45245,9.872801 0.36341,2.604481 0.84797,16.959414 0.18171,5.269532 0.66626,6.541488 0.7874,1.877649 2.90733,2.846759 2.1805,0.969109 8.84312,0.969109 v 14.476072 h -3.21017 q -8.78256,0 -13.02241,-1.45366 -4.23985,-1.3931 -6.9049,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15082,-4.179284 -1.15082,-14.476071 0,-11.508173 -1.27195,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }))
-  );
 
   // modules/editor/logic-panel.jsx
   var {
     Fragment,
     useState: useState2,
-    useMemo,
+    useMemo: useMemo2,
     useCallback: useCallback3
   } = window.wp.element;
   var { createHigherOrderComponent } = window.wp.compose;
   var { addFilter: addFilter2 } = window.wp.hooks;
-  var { InspectorControls } = window.wp.blockEditor;
   var {
-    PanelBody,
     Button: Button2,
     SelectControl,
     ExternalLink
@@ -1476,14 +1334,14 @@
     [setAttributes, attrName, blockName, postId]
   );
   var ClassTextarea = ({ value, onChange, placeholder }) => {
-    const { __: __3 } = window.wp.i18n;
+    const { __: __4 } = window.wp.i18n;
     return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-class-field" }, /* @__PURE__ */ wp.element.createElement(
       "label",
       {
         className: "components-base-control__label",
         htmlFor: "ve-class-input"
       },
-      __3("Template", "vector-expressions")
+      __4("Template", "vector-expressions")
     ), /* @__PURE__ */ wp.element.createElement(
       AutoTextarea,
       {
@@ -1492,95 +1350,91 @@
         onChange,
         placeholder
       }
-    ), /* @__PURE__ */ wp.element.createElement("p", { className: "components-base-control__help" }, __3("Mix static text and", "vector-expressions"), " ", /* @__PURE__ */ wp.element.createElement("code", null, "{{ expressions }}"), " ", __3("freely. Each token is evaluated and the full string becomes the class.", "vector-expressions")));
+    ), /* @__PURE__ */ wp.element.createElement("p", { className: "components-base-control__help" }, __4("Mix static text and", "vector-expressions"), " ", /* @__PURE__ */ wp.element.createElement("code", null, "{{ expressions }}"), " ", __4("freely. Each token is evaluated and the full string becomes the class.", "vector-expressions")));
   };
-  var LogicInspectorPanel = ({ ve_logic, update, showRef, setShowRef }) => {
-    return /* @__PURE__ */ wp.element.createElement(
-      PanelBody,
+  var LogicSidebarContent = ({ ve_logic, update, blockName }) => {
+    const [showRef, setShowRef] = useState2(false);
+    return /* @__PURE__ */ wp.element.createElement(Fragment, null, /* @__PURE__ */ wp.element.createElement("div", { className: "ve-section" }, /* @__PURE__ */ wp.element.createElement("p", { className: "ve-section-label" }, __2("Visibility", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
+      SelectControl,
       {
-        title: /* @__PURE__ */ wp.element.createElement("span", { className: "ve-panel-title" }, /* @__PURE__ */ wp.element.createElement(VectorArrowLogo, null), __2("Vector Expressions", "vector-expressions")),
-        initialOpen: false
+        label: __2("Action", "vector-expressions"),
+        value: (ve_logic == null ? void 0 : ve_logic.visible_action) || "show",
+        options: [
+          { label: __2("Show if True", "vector-expressions"), value: "show" },
+          { label: __2("Hide if True", "vector-expressions"), value: "hide" }
+        ],
+        onChange: (v) => update("visible_action", v),
+        __nextHasNoMarginBottom: true
+      }
+    ), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-class-field ve-condition-field" }, /* @__PURE__ */ wp.element.createElement(
+      "label",
+      {
+        className: "components-base-control__label",
+        htmlFor: "ve-condition-input"
       },
-      /* @__PURE__ */ wp.element.createElement("div", { className: "ve-section" }, /* @__PURE__ */ wp.element.createElement("p", { className: "ve-section-label" }, __2("Visibility", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
-        SelectControl,
-        {
-          label: __2("Action", "vector-expressions"),
-          value: (ve_logic == null ? void 0 : ve_logic.visible_action) || "show",
-          options: [
-            { label: __2("Show if True", "vector-expressions"), value: "show" },
-            { label: __2("Hide if True", "vector-expressions"), value: "hide" }
-          ],
-          onChange: (v) => update("visible_action", v),
-          __nextHasNoMarginBottom: true
-        }
-      ), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-class-field" }, /* @__PURE__ */ wp.element.createElement(
-        "label",
-        {
-          className: "components-base-control__label",
-          htmlFor: "ve-condition-input"
-        },
-        __2("Condition", "vector-expressions")
-      ), /* @__PURE__ */ wp.element.createElement(
-        AutoTextarea,
-        {
-          id: "ve-condition-input",
-          value: (ve_logic == null ? void 0 : ve_logic.visible) || "",
-          onChange: (v) => update("visible", v),
-          placeholder: "user.is_logged_in",
-          className: "ve-class-textarea"
-        }
-      )), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-syntax-ref-wrap" }, /* @__PURE__ */ wp.element.createElement(
-        Button2,
-        {
-          variant: "link",
-          size: "small",
-          className: "ve-syntax-ref-toggle",
-          onClick: () => setShowRef(!showRef),
-          "aria-expanded": showRef
-        },
-        __2("Syntax reference", "vector-expressions"),
-        " ",
-        showRef ? "\u25B2" : "\u25BC"
-      ), showRef && /* @__PURE__ */ wp.element.createElement("table", { className: "ve-syntax-ref" }, /* @__PURE__ */ wp.element.createElement("tbody", null, /* @__PURE__ */ wp.element.createElement("tr", { className: "ve-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Variables", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Display name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.is_logged_in")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Logged in?", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.role")), /* @__PURE__ */ wp.element.createElement("td", null, __2("User role", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.title")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post title", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author_name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.meta.my_key")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post meta", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", { className: "ve-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Operators & Filters", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a == b")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Equals", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a ? b : c")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Ternary", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "val | upper")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Filter", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.date | date")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Format date", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author | get_user")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author object", "vector-expressions"))))))),
-      /* @__PURE__ */ wp.element.createElement("div", { className: "ve-section ve-section--bordered" }, /* @__PURE__ */ wp.element.createElement("p", { className: "ve-section-label" }, __2("Dynamic Class", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
-        ClassTextarea,
-        {
-          value: (ve_logic == null ? void 0 : ve_logic.class) || "",
-          onChange: (v) => update("class", v),
-          placeholder: `prefix-{{ user.role | kebab }}`
-        }
-      ))
-    );
+      __2("Condition", "vector-expressions")
+    ), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-expr-field" }, /* @__PURE__ */ wp.element.createElement("span", { className: "ve-expr-brace", "aria-hidden": "true" }, "{{ "), /* @__PURE__ */ wp.element.createElement(
+      AutoTextarea,
+      {
+        id: "ve-condition-input",
+        value: (ve_logic == null ? void 0 : ve_logic.visible) || "",
+        onChange: (v) => update("visible", v),
+        placeholder: "user.is_logged_in",
+        className: "ve-class-textarea"
+      }
+    ), /* @__PURE__ */ wp.element.createElement("span", { className: "ve-expr-brace", "aria-hidden": "true" }, " }}"))), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-syntax-ref-wrap" }, /* @__PURE__ */ wp.element.createElement(
+      Button2,
+      {
+        variant: "link",
+        size: "small",
+        className: "ve-syntax-ref-toggle",
+        onClick: () => setShowRef(!showRef),
+        "aria-expanded": showRef
+      },
+      __2("Syntax reference", "vector-expressions"),
+      " ",
+      showRef ? "\u25B2" : "\u25BC"
+    ), showRef && /* @__PURE__ */ wp.element.createElement("table", { className: "ve-syntax-ref" }, /* @__PURE__ */ wp.element.createElement("tbody", null, /* @__PURE__ */ wp.element.createElement("tr", { className: "ve-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Variables", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Display name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.is_logged_in")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Logged in?", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.role")), /* @__PURE__ */ wp.element.createElement("td", null, __2("User role", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.title")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post title", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author_name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.meta.my_key")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post meta", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", { className: "ve-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Operators & Filters", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a == b")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Equals", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a ? b : c")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Ternary", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "val | upper")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Filter", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.date | date")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Format date", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author | get_user")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author object", "vector-expressions"))))))), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-section ve-section--bordered" }, /* @__PURE__ */ wp.element.createElement("p", { className: "ve-section-label" }, __2("Dynamic Class", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
+      ClassTextarea,
+      {
+        value: (ve_logic == null ? void 0 : ve_logic.class) || "",
+        onChange: (v) => update("class", v),
+        placeholder: `prefix-{{ user.role | kebab }}`
+      }
+    )));
   };
   var LogicPanel = createHigherOrderComponent((BlockEdit) => {
     return (props) => {
       var _a2, _b2, _c2, _d2;
-      const { attributes, setAttributes, isSelected, name, context, clientId } = props;
+      const { attributes, setAttributes, name, context, clientId } = props;
       const { ve_logic } = attributes;
-      const [showRef, setShowRef] = useState2(false);
-      const attrName = useMemo(() => getRichTextAttrName(name), [name]);
+      const attrName = useMemo2(() => getRichTextAttrName(name), [name]);
       const postId = (context == null ? void 0 : context.postId) || ((_b2 = (_a2 = select3("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
       const postType = (context == null ? void 0 : context.postType) || ((_d2 = (_c2 = select3("core/editor")) == null ? void 0 : _c2.getCurrentPostType) == null ? void 0 : _d2.call(_c2)) || "post";
       const wrappedSetAttributes = usePass1Conversion(setAttributes, attrName, name, postId);
       const newProps = { ...props, setAttributes: wrappedSetAttributes };
       useHydrateViews(attributes, setAttributes, attrName, name, postId, postType, clientId);
-      if (!isSelected) return /* @__PURE__ */ wp.element.createElement(BlockEdit, { ...newProps });
-      const update = (key, val) => setAttributes({ ve_logic: { ...ve_logic != null ? ve_logic : {}, [key]: val } });
-      return /* @__PURE__ */ wp.element.createElement(Fragment, null, /* @__PURE__ */ wp.element.createElement(BlockEdit, { ...newProps }), /* @__PURE__ */ wp.element.createElement(InspectorControls, null, /* @__PURE__ */ wp.element.createElement(
-        LogicInspectorPanel,
-        {
-          ve_logic,
-          update,
-          showRef,
-          setShowRef
-        }
-      )));
+      return /* @__PURE__ */ wp.element.createElement(BlockEdit, { ...newProps });
     };
   }, "LogicPanel");
   var registerLogicPanel = () => {
-    addFilter2("editor.BlockEdit", "ve/logic-panel", LogicPanel);
+    addFilter2("editor.BlockEdit", "ve.logic-panel", LogicPanel);
+    addFilter2(
+      "vectorExpressions.sidebar.tab.logic",
+      "ve.sidebar-logic",
+      (content, ve_logic, update, blockName) => {
+        return /* @__PURE__ */ wp.element.createElement(Fragment, null, content, /* @__PURE__ */ wp.element.createElement(
+          LogicSidebarContent,
+          {
+            ve_logic,
+            update,
+            blockName
+          }
+        ));
+      }
+    );
     const REQUIRED_CONTEXT = ["postId", "postType"];
-    addFilter2("blocks.registerBlockType", "ve-logic/inject-context", (settings, name) => {
+    addFilter2("blocks.registerBlockType", "ve-logic.inject-context", (settings, name) => {
       if (SKIP_CONVERT_BLOCKS.has(name)) return settings;
       const existing = settings.usesContext || [];
       const missing = REQUIRED_CONTEXT.filter((c) => !existing.includes(c));
@@ -1597,8 +1451,198 @@
     });
   };
 
+  // modules/editor/vector-sidebar.jsx
+  var { createElement: h, Fragment: Fragment2, useMemo: useMemo3 } = window.wp.element;
+  var { PluginSidebar, PluginSidebarMoreMenuItem } = window.wp.editor;
+  var { registerPlugin } = window.wp.plugins;
+  var { useSelect: useSelect2, useDispatch: useDispatch2 } = window.wp.data;
+  var { TabPanel, Button: Button3, Tooltip } = window.wp.components;
+  var { __: __3 } = window.wp.i18n;
+  var { applyFilters } = window.wp.hooks;
+  var SIDEBAR_NAME = "vector-expressions";
+  var SidebarIcon = () => /* @__PURE__ */ wp.element.createElement(
+    "svg",
+    {
+      width: "24",
+      height: "24",
+      viewBox: "-376 -15 92 126",
+      "aria-hidden": "true",
+      focusable: "false"
+    },
+    /* @__PURE__ */ wp.element.createElement("g", { style: { fill: "currentColor" } }, /* @__PURE__ */ wp.element.createElement("path", { d: "M -372.38427,54.856239 V 40.319598 q 5.39067,-0.242277 7.93459,-2.119927 2.60448,-1.877649 3.937,-5.875225 1.3931,-3.997576 1.3931,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09024,-4.4215615 3.45245,-7.0260429 2.42277,-2.6650507 7.02604,-4.3609921 4.66384,-1.695941 13.38582,-1.695941 h 3.21018 v 14.53664 q -6.48092,0 -8.47971,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48455,6.117502 -3.33131,10.963049 -2.11993,3.573591 -7.32889,6.965474 4.42156,2.543912 7.02604,6.480919 2.60448,3.876437 3.45245,9.872801 0.36342,2.604481 0.84797,16.959414 0.18171,5.269532 0.66627,6.541488 0.7874,1.877649 2.90732,2.846759 2.1805,0.969109 8.84313,0.969109 v 14.476072 h -3.21018 q -8.78255,0 -13.0224,-1.45366 -4.23986,-1.3931 -6.90491,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15081,-4.179284 -1.15081,-14.476071 0,-11.508173 -1.27196,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }), /* @__PURE__ */ wp.element.createElement("path", { d: "M -329.85728,54.856239 V 40.319598 q 5.39067,-0.242277 7.93458,-2.119927 2.60448,-1.877649 3.93701,-5.875225 1.39309,-3.997576 1.39309,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09025,-4.4215615 3.45245,-7.0260429 2.42278,-2.6650507 7.02605,-4.3609921 4.66383,-1.695941 13.38582,-1.695941 h 3.21017 v 14.53664 q -6.48092,0 -8.4797,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48456,6.117502 -3.33132,10.963049 -2.11992,3.573591 -7.32889,6.965474 4.42157,2.543912 7.02605,6.480919 2.60448,3.876437 3.45245,9.872801 0.36341,2.604481 0.84797,16.959414 0.18171,5.269532 0.66626,6.541488 0.7874,1.877649 2.90733,2.846759 2.1805,0.969109 8.84312,0.969109 v 14.476072 h -3.21017 q -8.78256,0 -13.02241,-1.45366 -4.23985,-1.3931 -6.9049,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15082,-4.179284 -1.15082,-14.476071 0,-11.508173 -1.27195,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }))
+  );
+  var TabIcon = ({ label, children }) => /* @__PURE__ */ wp.element.createElement("span", { className: "ve-tab-icon", title: label, "aria-label": label }, children);
+  var ExpressionTabIcon = () => /* @__PURE__ */ wp.element.createElement(TabIcon, { label: __3("Expression", "vector-expressions") }, /* @__PURE__ */ wp.element.createElement("svg", { width: "20", height: "20", viewBox: "-376 -15 92 126", "aria-hidden": "true", focusable: "false" }, /* @__PURE__ */ wp.element.createElement("g", { style: { fill: "currentColor" } }, /* @__PURE__ */ wp.element.createElement("path", { d: "M -372.38427,54.856239 V 40.319598 q 5.39067,-0.242277 7.93459,-2.119927 2.60448,-1.877649 3.937,-5.875225 1.3931,-3.997576 1.3931,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09024,-4.4215615 3.45245,-7.0260429 2.42277,-2.6650507 7.02604,-4.3609921 4.66384,-1.695941 13.38582,-1.695941 h 3.21018 v 14.53664 q -6.48092,0 -8.47971,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48455,6.117502 -3.33131,10.963049 -2.11993,3.573591 -7.32889,6.965474 4.42156,2.543912 7.02604,6.480919 2.60448,3.876437 3.45245,9.872801 0.36342,2.604481 0.84797,16.959414 0.18171,5.269532 0.66627,6.541488 0.7874,1.877649 2.90732,2.846759 2.1805,0.969109 8.84313,0.969109 v 14.476072 h -3.21018 q -8.78255,0 -13.0224,-1.45366 -4.23986,-1.3931 -6.90491,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15081,-4.179284 -1.15081,-14.476071 0,-11.508173 -1.27196,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }), /* @__PURE__ */ wp.element.createElement("path", { d: "M -329.85728,54.856239 V 40.319598 q 5.39067,-0.242277 7.93458,-2.119927 2.60448,-1.877649 3.93701,-5.875225 1.39309,-3.997576 1.39309,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09025,-4.4215615 3.45245,-7.0260429 2.42278,-2.6650507 7.02605,-4.3609921 4.66383,-1.695941 13.38582,-1.695941 h 3.21017 v 14.53664 q -6.48092,0 -8.4797,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48456,6.117502 -3.33132,10.963049 -2.11992,3.573591 -7.32889,6.965474 4.42157,2.543912 7.02605,6.480919 2.60448,3.876437 3.45245,9.872801 0.36341,2.604481 0.84797,16.959414 0.18171,5.269532 0.66626,6.541488 0.7874,1.877649 2.90733,2.846759 2.1805,0.969109 8.84312,0.969109 v 14.476072 h -3.21017 q -8.78256,0 -13.02241,-1.45366 -4.23985,-1.3931 -6.9049,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15082,-4.179284 -1.15082,-14.476071 0,-11.508173 -1.27195,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }))));
+  var LogicTabIcon = () => /* @__PURE__ */ wp.element.createElement(TabIcon, { label: __3("Logic", "vector-expressions") }, /* @__PURE__ */ wp.element.createElement("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": "true", focusable: "false" }, /* @__PURE__ */ wp.element.createElement("path", { d: "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" })));
+  var ExpressionTabContent = () => {
+    const { expr, preview } = useSelect2((sel) => ({
+      expr: sel(STORE_NAME).getExpr(),
+      preview: sel(STORE_NAME).getPreview()
+    }), []);
+    const { updateExpr } = useDispatch2(STORE_NAME);
+    const refs2 = getTokenRefs();
+    const handleApply = () => {
+      var _a2, _b2;
+      (_a2 = refs2.applyUpdate) == null ? void 0 : _a2.call(refs2, expr);
+      (_b2 = refs2.dismiss) == null ? void 0 : _b2.call(refs2);
+    };
+    const handleRemove = () => {
+      var _a2, _b2;
+      (_a2 = refs2.applyRemove) == null ? void 0 : _a2.call(refs2);
+      (_b2 = refs2.dismiss) == null ? void 0 : _b2.call(refs2);
+    };
+    return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-expression-editor" }, /* @__PURE__ */ wp.element.createElement("div", { className: "ve-expr-editor-field" }, /* @__PURE__ */ wp.element.createElement("label", { className: "components-base-control__label" }, __3("Expression", "vector-expressions")), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-expr-field" }, /* @__PURE__ */ wp.element.createElement("span", { className: "ve-expr-brace", "aria-hidden": "true" }, "{{ "), /* @__PURE__ */ wp.element.createElement(
+      AutoTextarea,
+      {
+        className: "ve-expr-input ve-class-textarea",
+        value: expr,
+        onChange: updateExpr,
+        placeholder: "user.is_logged_in",
+        onKeyDown: (e) => {
+          var _a2;
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            (_a2 = refs2.dismiss) == null ? void 0 : _a2.call(refs2);
+            return;
+          }
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            handleApply();
+          }
+        }
+      }
+    ), /* @__PURE__ */ wp.element.createElement("span", { className: "ve-expr-brace", "aria-hidden": "true" }, " }}"))), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-live-preview", style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "8px",
+      marginTop: "12px",
+      background: !preview || !preview.valid ? "#fcf0f1" : "#f0f0f0",
+      padding: "12px",
+      borderRadius: "4px",
+      border: "1px solid " + (!preview || !preview.valid ? "#cc1818" : "#e0e0e0")
+    } }, /* @__PURE__ */ wp.element.createElement("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: "#1e1e1e", fontSize: "12px" } }, /* @__PURE__ */ wp.element.createElement("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" }, /* @__PURE__ */ wp.element.createElement("path", { d: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" }), /* @__PURE__ */ wp.element.createElement("circle", { cx: "12", cy: "12", r: "3" })), /* @__PURE__ */ wp.element.createElement("span", null, __3("Preview", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("code", { style: {
+      color: !preview || !preview.valid ? "#cc1818" : "#39b074",
+      maxWidth: "160px",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontSize: "14px",
+      fontFamily: "monospace"
+    } }, !preview || !preview.valid ? expr ? (preview == null ? void 0 : preview.preview) || __3("Invalid syntax", "vector-expressions") : "" : String(preview.preview))), /* @__PURE__ */ wp.element.createElement(
+      ExpressionSuggestions,
+      {
+        expr,
+        onSelect: updateExpr
+      }
+    ), /* @__PURE__ */ wp.element.createElement("footer", { style: { display: "flex", justifyContent: "space-between", marginTop: "16px" } }, /* @__PURE__ */ wp.element.createElement(
+      Button3,
+      {
+        variant: "secondary",
+        isDestructive: true,
+        onClick: handleRemove
+      },
+      __3("Remove", "vector-expressions")
+    ), /* @__PURE__ */ wp.element.createElement(
+      Button3,
+      {
+        variant: "primary",
+        onClick: handleApply
+      },
+      __3("Apply", "vector-expressions")
+    )));
+  };
+  var DEFAULT_TABS = [
+    { name: "logic", title: /* @__PURE__ */ wp.element.createElement(LogicTabIcon, null), className: "ve-sidebar-tab" }
+  ];
+  var VectorSidebarPanel = () => {
+    var _a2;
+    const { selectedBlock, blockName } = useSelect2((sel) => {
+      const block = sel("core/block-editor").getSelectedBlock();
+      return {
+        selectedBlock: block,
+        blockName: (block == null ? void 0 : block.name) || ""
+      };
+    }, []);
+    const isTokenActive = useSelect2((sel) => sel(STORE_NAME).isTokenActive(), []);
+    const { updateBlockAttributes } = useDispatch2("core/block-editor");
+    const baseTabs = applyFilters("vectorExpressions.sidebar.tabs", DEFAULT_TABS);
+    const tabs = useMemo3(() => {
+      if (!isTokenActive) return baseTabs;
+      const exprTab = {
+        name: "expression",
+        title: /* @__PURE__ */ wp.element.createElement(ExpressionTabIcon, null),
+        className: "ve-sidebar-tab ve-sidebar-tab--expr"
+      };
+      return [exprTab, ...baseTabs];
+    }, [isTokenActive, baseTabs]);
+    if (!selectedBlock) {
+      return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-sidebar-empty" }, /* @__PURE__ */ wp.element.createElement("p", null, __3("Select a block to edit its Vector settings.", "vector-expressions")));
+    }
+    const { clientId, attributes } = selectedBlock;
+    const ve_logic = attributes == null ? void 0 : attributes.ve_logic;
+    const update = (key, val) => {
+      updateBlockAttributes(clientId, {
+        ve_logic: { ...ve_logic != null ? ve_logic : {}, [key]: val }
+      });
+    };
+    if (tabs.length <= 1) {
+      const tabName = ((_a2 = tabs[0]) == null ? void 0 : _a2.name) || "logic";
+      if (tabName === "expression") {
+        return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-sidebar-tab-content" }, /* @__PURE__ */ wp.element.createElement(ExpressionTabContent, null));
+      }
+      return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-sidebar-tab-content" }, applyFilters(
+        `vectorExpressions.sidebar.tab.${tabName}`,
+        null,
+        ve_logic,
+        update,
+        blockName
+      ));
+    }
+    const initialTab = isTokenActive ? "expression" : void 0;
+    return /* @__PURE__ */ wp.element.createElement(
+      TabPanel,
+      {
+        key: isTokenActive ? "with-expr" : "without-expr",
+        className: "ve-sidebar-tabs",
+        tabs,
+        initialTabName: initialTab
+      },
+      (tab) => /* @__PURE__ */ wp.element.createElement("div", { className: "ve-sidebar-tab-content" }, tab.name === "expression" ? /* @__PURE__ */ wp.element.createElement(ExpressionTabContent, null) : applyFilters(
+        `vectorExpressions.sidebar.tab.${tab.name}`,
+        null,
+        ve_logic,
+        update,
+        blockName
+      ))
+    );
+  };
+  var registerVectorSidebar = () => {
+    registerPlugin(SIDEBAR_NAME, {
+      render: () => /* @__PURE__ */ wp.element.createElement(Fragment2, null, /* @__PURE__ */ wp.element.createElement(
+        PluginSidebarMoreMenuItem,
+        {
+          target: SIDEBAR_NAME,
+          icon: /* @__PURE__ */ wp.element.createElement(SidebarIcon, null)
+        },
+        __3("Vector Expressions", "vector-expressions")
+      ), /* @__PURE__ */ wp.element.createElement(
+        PluginSidebar,
+        {
+          name: SIDEBAR_NAME,
+          title: __3("Vector Expressions", "vector-expressions"),
+          icon: /* @__PURE__ */ wp.element.createElement(SidebarIcon, null),
+          className: "ve-sidebar"
+        },
+        /* @__PURE__ */ wp.element.createElement(VectorSidebarPanel, null)
+      ))
+    });
+  };
+
   // modules/editor/editor.jsx
   registerExpressionFormat();
   registerAutocompleter();
   registerLogicPanel();
+  registerVectorSidebar();
 })();

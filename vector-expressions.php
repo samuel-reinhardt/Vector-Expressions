@@ -6,7 +6,7 @@ declare( strict_types=1 );
  * Plugin Name:       Vector Expressions
  * Plugin URI:        https://vectorarrow.com/products/vector-expressions/
  * Description:       Logic engine for Gutenberg. Personalize content and control block visibility.
- * Version:           1.0.0
+ * Version:           1.0.1
  * Author:            Vector WP
  * Author URI:        https://vectorarrow.com
  * License:           GPL v2 or later
@@ -566,7 +566,7 @@ final class VectorExpressions {
 		wp_enqueue_script(
 			've-editor',
 			VE_URL . 'dist/editor.js',
-			[ 'wp-blocks', 'wp-element', 'wp-components', 'wp-data', 'wp-i18n', 'wp-compose', 'wp-block-editor', 'wp-rich-text', 'wp-hooks' ],
+			[ 'wp-blocks', 'wp-element', 'wp-components', 'wp-data', 'wp-i18n', 'wp-compose', 'wp-block-editor', 'wp-rich-text', 'wp-hooks', 'wp-plugins', 'wp-editor', 'wp-edit-post' ],
 			VE_VERSION,
 			true
 		);

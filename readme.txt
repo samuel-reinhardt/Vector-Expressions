@@ -3,7 +3,7 @@ Contributors: vectorarrow
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Tags: block editor, gutenberg, logic, dynamic content, expressions
@@ -18,7 +18,7 @@ Vector Expressions uses a **mustache-style template syntax** evaluated server-si
 
 ### How to Use
 
-Open up the block editor and add a block. Then, open the Vector Logic panel in the block sidebar and add an expression to control visibility or append a CSS class to the block. 
+Open up the block editor and add a block. Then, click the Vector icon ({{ braces) in the sidebar to open the Vector tab. Use the Logic section to control visibility or append a CSS class to the block.
 
 You can also add expressions directly to the block content. Create a paragraph block, and start typing `{{` to see the autocomplete suggestions. Select the one you want to use and then press enter or tab to close the autocomplete. 
 The expression will provide a preview inline to your content. Save the post and view it on the frontend to see the end result.
@@ -50,7 +50,7 @@ You do not need to know WP internal property names. The engine maps common alias
 
 ### Dynamic Class and Visibility Logic
 
-Every block in the Gutenberg editor gains a **Vector Logic** panel in its inspector sidebar.
+Every block in the Gutenberg editor is configurable via the dedicated **Vector** sidebar tab (click the {{ braces icon in the sidebar header).
 
 Control whether a block renders at all:
 * Show if True — block is visible when the expression is truthy
@@ -65,13 +65,13 @@ For a full reference of the Expression Language, visit the plugin website or the
 
 1. Upload the plugin files to the `/wp-content/plugins/vector-expressions` directory, or install the plugin through the WordPress plugins screen directly.
 2. Activate the plugin through the 'Plugins' screen in WordPress.
-3. Open the Block Editor and look for the "Vector Logic" panel in the block sidebar, or start typing expressions in the block editor.
+3. Open the Block Editor and click the Vector ({{ braces) icon in the sidebar to access the Vector tab.
 
 == Frequently Asked Questions ==
 
 = Does this work with any block? =
 
-Yes! The Vector Logic panel is injected into all registered Gutenberg blocks, and can be added to any block content. Note that expression tokens inside code or raw-content blocks (like core/code or core/html) are not processed to prevent accidental evaluation.
+Yes! The Vector sidebar tab is available for all registered Gutenberg blocks, and expressions can be added to any block content. Note that expression tokens inside code or raw-content blocks (like core/code or core/html) are not processed to prevent accidental evaluation.
 
 = Is it evaluated server-side or in JavaScript? =
 
@@ -79,13 +79,27 @@ All expressions are evaluated server-side in PHP during the `render_block` filte
 
 == Changelog ==
 
+= 1.0.1 =
+* Added: Dedicated Vector sidebar tab in the block editor alongside Post and Block tabs.
+* Added: Expression tab — clicking an in-content token opens sidebar with focused expression editor.
+* Added: Accordion suggestions with searchable filter for browsing available variables and modifiers.
+* Added: Tabbed layout with per-tab content filters for extensions.
+* Added: `vectorExpressions.sidebar.tabs` JS filter for registering additional tabs.
+* Added: `vectorExpressions.suggestions.roots` JS filter for registering root categories.
+* Added: `vectorExpressions.suggestions.patterns` JS filter for curated pattern expressions.
+* Added: `vectorExpressions.suggestions.categories` JS filter for accordion section customization.
+* Changed: Expression editing moved from floating popover to sidebar tab.
+* Changed: Moved Visibility and Dynamic Class controls from the block inspector into the new sidebar.
+* Changed: Logic panel HOC is now UI-free — only handles pass1/pass2 token conversion.
+* Fixed: Invalid forward slashes in WordPress hook namespace arguments replaced with dots — resolves crash on block selection.
+
 = 1.0.0 =
 * Added: Vector Expressions block format added to the Rich Text toolbar.
 * Added: Expression pill editing popover with syntax highlighting.
 * Added: Server-side parsing and evaluation engine for expressions.
 * Added: Logic panel in block inspector for visibility and class expressions.
 * Added: Live preview evaluation via REST APIs.
-* Changed: Expression pill HTML tag changed from `<mark>` to `<span>`.
+* Changed: Expression pill HTML tag changed from <mark> to <span>.
 * Fixed: Expression format now appears in core Button blocks and other blocks using `withoutInteractiveFormatting`. Removed `interactive: true` from format registration.
 * Fixed: Pressing Escape while editing an expression in the popover now reliably closes it.
 * Fixed: Custom `vector/button` block now allows all registered rich-text formats (was `allowedFormats={[]}`).

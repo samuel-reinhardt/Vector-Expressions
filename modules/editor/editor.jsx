@@ -10,7 +10,9 @@
 import { registerExpressionFormat } from './expression-format.jsx';
 import { registerAutocompleter }    from './autocompleter.js';
 import { registerLogicPanel }       from './logic-panel.jsx';
+import { registerVectorSidebar }    from './vector-sidebar.jsx';
 
 registerExpressionFormat();
 registerAutocompleter();
 registerLogicPanel();
+registerVectorSidebar();
