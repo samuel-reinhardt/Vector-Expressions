@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Derive the plugin/theme slug from the repo name (lowercased).
+      - name: Derive package slug
+        id: slug
+        run: |
+          SLUG=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          echo "slug=${SLUG}" >> "$GITHUB_OUTPUT"
+          echo "Package slug: ${SLUG}"
+
+      # Build a zip with the correct top-level folder name so WordPress
+      # installs into wp-content/plugins/<slug>/ (not <RepoName>-<tag>/).
+      - name: Build release zip
+        id: zip
+        run: |
+          SLUG="${{ steps.slug.outputs.slug }}"
+          mkdir -p "/tmp/${SLUG}"
+          # Copy everything except .git and .github into the named folder.
+          rsync -a --exclude='.git' --exclude='.github' ./ "/tmp/${SLUG}/"
+          cd /tmp && zip -r "${SLUG}.zip" "${SLUG}"
+          echo "path=/tmp/${SLUG}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.zip.outputs.path }}
+          generate_release_notes: true
