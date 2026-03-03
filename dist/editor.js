@@ -165,6 +165,12 @@
     el2.innerHTML = text;
     return el2.value;
   };
+  var decodeAttr = (raw) => {
+    if (!raw || !raw.includes("&")) return raw;
+    const el2 = document.createElement("textarea");
+    el2.innerHTML = raw;
+    return el2.value;
+  };
   var viewCache = /* @__PURE__ */ new Map();
   var cacheKey = (expr, postId) => `${expr}::${postId}`;
   var getCachedView = (expr, postId) => viewCache.get(cacheKey(expr, postId));
@@ -182,9 +188,10 @@
       if (!isQueryChild && html === lastWritten.current) return;
       const toFetch = /* @__PURE__ */ new Set();
       let needsUpdate = false;
-      html.replace(SPAN_TAG_RE, (_match, tagInner, expr) => {
-        if (!expr) return;
+      html.replace(SPAN_TAG_RE, (_match, tagInner, rawExpr) => {
+        if (!rawExpr) return;
         if (/\bdata-ve-view="/.test(tagInner) && !isQueryChild) return;
+        const expr = decodeAttr(rawExpr);
         const key = cacheKey(expr, postId);
         if (!viewCache.has(key)) {
           const result = resolveFromStore(
@@ -248,9 +255,10 @@
     });
   };
   var applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
-    const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, expr) => {
-      if (!expr) return fullMatch;
+    const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, rawExpr) => {
+      if (!rawExpr) return fullMatch;
       if (/\bdata-ve-view="/.test(tagInner)) return fullMatch;
+      const expr = decodeAttr(rawExpr);
       const view = viewCache.get(cacheKey(expr, postId));
       if (view === void 0) return fullMatch;
       const cleaned = cleanPreview(view);

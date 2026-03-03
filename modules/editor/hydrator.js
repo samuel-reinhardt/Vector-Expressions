@@ -167,6 +167,23 @@ const cleanPreview = (val) => {
   return el.value;
 };
 
+/**
+ * Decode HTML entities in an attribute value captured from raw HTML.
+ *
+ * Expression attributes are stored as `data-ve-expr="&quot;now&quot;"`
+ * in the HTML string. The regex captures `&quot;now&quot;` literally,
+ * but the parser and REST API expect the decoded form `"now"`.
+ *
+ * @param {string} raw Attribute value with possible HTML entities.
+ * @returns {string} Decoded string.
+ */
+const decodeAttr = (raw) => {
+  if (!raw || !raw.includes("&")) return raw;
+  const el = document.createElement("textarea");
+  el.innerHTML = raw;
+  return el.value;
+};
+
 const formatDate = (iso) => {
   if (!iso) return "";
   // WordPress stores dates in the site's local timezone WITHOUT an offset
@@ -257,10 +274,11 @@ export const useHydrateViews = (
     const toFetch = new Set();
     let needsUpdate = false;
 
-    html.replace(SPAN_TAG_RE, (_match, tagInner, expr) => {
-      if (!expr) return;
+    html.replace(SPAN_TAG_RE, (_match, tagInner, rawExpr) => {
+      if (!rawExpr) return;
       if (/\bdata-ve-view="/.test(tagInner) && !isQueryChild) return;
 
+      const expr = decodeAttr(rawExpr);
       const key = cacheKey(expr, postId);
       if (!viewCache.has(key)) {
         const result = resolveFromStore(
@@ -343,10 +361,11 @@ export const useHydrateViews = (
  * Used for blocks NOT inside a Query Loop (each has its own attributes).
  */
 const applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
-  const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, expr) => {
-    if (!expr) return fullMatch;
+  const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, rawExpr) => {
+    if (!rawExpr) return fullMatch;
     if (/\bdata-ve-view="/.test(tagInner)) return fullMatch;
 
+    const expr = decodeAttr(rawExpr);
     const view = viewCache.get(cacheKey(expr, postId));
     if (view === undefined) return fullMatch;
 
