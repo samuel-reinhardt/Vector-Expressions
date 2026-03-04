@@ -55,10 +55,13 @@ const resolveFromStore = (expr, postId, postType, editorPostId) => {
   switch (root) {
     case "post":
       return resolvePost(prop, postId, postType, editorPostId);
-    case "user":
-      return resolveUser(prop);
     case "site":
       return resolveSite(prop);
+    // `user` is intentionally omitted — `getCurrentUser()` is a one-shot
+    // `select()` call inside useEffect (not a reactive `useSelect`), so it
+    // may return undefined on the first render. The inflight REST fetch
+    // then gets cancelled by cleanup when the entity store triggers a
+    // re-render. Delegating to `fetchPreview` avoids this race entirely.
     default:
       return fail;
   }
@@ -276,7 +279,10 @@ export const useHydrateViews = (
 
     html.replace(SPAN_TAG_RE, (_match, tagInner, rawExpr) => {
       if (!rawExpr) return;
-      if (/\bdata-ve-view="/.test(tagInner) && !isQueryChild) return;
+      // Skip spans that already have a non-empty view (already hydrated).
+      // Empty views (data-ve-view="") must be re-hydrated.
+      const existingView = tagInner.match(/\bdata-ve-view="([^"]*)"/)?.[1];
+      if (existingView && !isQueryChild) return;
 
       const expr = decodeAttr(rawExpr);
       const key = cacheKey(expr, postId);
@@ -311,8 +317,6 @@ export const useHydrateViews = (
     }
 
     // Fetch remaining expressions via REST.
-    let cancelled = false;
-
     Promise.all(
       [...toFetch].map((expr) =>
         fetchPreview(expr, postId).then((r) => ({
@@ -321,7 +325,6 @@ export const useHydrateViews = (
         })),
       ),
     ).then((results) => {
-      if (cancelled) return;
       results.forEach(({ expr, preview }) => {
         viewCache.set(cacheKey(expr, postId), preview);
       });
@@ -332,10 +335,6 @@ export const useHydrateViews = (
         applyViewsAttr(html, postId, attrName, setAttributes, lastWritten);
       }
     });
-
-    return () => {
-      cancelled = true;
-    };
   }, [attributes[attrName], postId]);
 
   // For Query Loop blocks: re-apply cached views after EVERY render.
@@ -363,7 +362,9 @@ export const useHydrateViews = (
 const applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
   const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, rawExpr) => {
     if (!rawExpr) return fullMatch;
-    if (/\bdata-ve-view="/.test(tagInner)) return fullMatch;
+    // Skip spans that already have a non-empty view.
+    const existingView = tagInner.match(/\bdata-ve-view="([^"]*)"/)?.[1];
+    if (existingView) return fullMatch;
 
     const expr = decodeAttr(rawExpr);
     const view = viewCache.get(cacheKey(expr, postId));

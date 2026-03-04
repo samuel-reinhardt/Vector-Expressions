@@ -26,10 +26,13 @@
     switch (root) {
       case "post":
         return resolvePost(prop, postId, postType, editorPostId);
-      case "user":
-        return resolveUser(prop);
       case "site":
         return resolveSite(prop);
+      // `user` is intentionally omitted — `getCurrentUser()` is a one-shot
+      // `select()` call inside useEffect (not a reactive `useSelect`), so it
+      // may return undefined on the first render. The inflight REST fetch
+      // then gets cancelled by cleanup when the entity store triggers a
+      // re-render. Delegating to `fetchPreview` avoids this race entirely.
       default:
         return fail;
     }
@@ -85,41 +88,6 @@
         if (!authorId) return "";
         const user = select("core").getUser(authorId);
         return (_a2 = user == null ? void 0 : user.name) != null ? _a2 : "";
-      }
-    };
-    const getter = map[prop];
-    if (!getter) return fail;
-    return { value: getter(), resolved: true };
-  };
-  var resolveUser = (prop) => {
-    const fail = { value: "", resolved: false };
-    const user = select("core").getCurrentUser();
-    if (!user) return fail;
-    const map = {
-      name: () => {
-        var _a2;
-        return (_a2 = user.name) != null ? _a2 : "";
-      },
-      email: () => {
-        var _a2;
-        return (_a2 = user.email) != null ? _a2 : "";
-      },
-      id: () => {
-        var _a2;
-        return String((_a2 = user.id) != null ? _a2 : "");
-      },
-      login: () => {
-        var _a2, _b2;
-        return (_b2 = (_a2 = user.slug) != null ? _a2 : user.username) != null ? _b2 : "";
-      },
-      url: () => {
-        var _a2, _b2;
-        return (_b2 = (_a2 = user.url) != null ? _a2 : user.link) != null ? _b2 : "";
-      },
-      is_logged_in: () => "true",
-      roles: () => {
-        var _a2;
-        return ((_a2 = user.roles) != null ? _a2 : []).join(", ");
       }
     };
     const getter = map[prop];
@@ -189,8 +157,10 @@
       const toFetch = /* @__PURE__ */ new Set();
       let needsUpdate = false;
       html.replace(SPAN_TAG_RE, (_match, tagInner, rawExpr) => {
+        var _a3;
         if (!rawExpr) return;
-        if (/\bdata-ve-view="/.test(tagInner) && !isQueryChild) return;
+        const existingView = (_a3 = tagInner.match(/\bdata-ve-view="([^"]*)"/)) == null ? void 0 : _a3[1];
+        if (existingView && !isQueryChild) return;
         const expr = decodeAttr(rawExpr);
         const key = cacheKey(expr, postId);
         if (!viewCache.has(key)) {
@@ -219,7 +189,6 @@
         }
         return;
       }
-      let cancelled = false;
       Promise.all(
         [...toFetch].map(
           (expr) => fetchPreview(expr, postId).then((r) => {
@@ -231,7 +200,6 @@
           })
         )
       ).then((results) => {
-        if (cancelled) return;
         results.forEach(({ expr, preview }) => {
           viewCache.set(cacheKey(expr, postId), preview);
         });
@@ -241,9 +209,6 @@
           applyViewsAttr(html, postId, attrName, setAttributes, lastWritten);
         }
       });
-      return () => {
-        cancelled = true;
-      };
     }, [attributes[attrName], postId]);
     useEffect2(() => {
       var _a2, _b2;
@@ -256,8 +221,10 @@
   };
   var applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
     const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, rawExpr) => {
+      var _a2;
       if (!rawExpr) return fullMatch;
-      if (/\bdata-ve-view="/.test(tagInner)) return fullMatch;
+      const existingView = (_a2 = tagInner.match(/\bdata-ve-view="([^"]*)"/)) == null ? void 0 : _a2[1];
+      if (existingView) return fullMatch;
       const expr = decodeAttr(rawExpr);
       const view = viewCache.get(cacheKey(expr, postId));
       if (view === void 0) return fullMatch;
