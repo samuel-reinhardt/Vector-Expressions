@@ -24,21 +24,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'VE_VERSION', '1.0.0' );
-define( 'VE_PATH', plugin_dir_path( __FILE__ ) );
-define( 'VE_URL', plugin_dir_url( __FILE__ ) );
+define( 'VECTARR_VERSION', '1.0.1' );
+define( 'VECTARR_PATH', plugin_dir_path( __FILE__ ) );
+define( 'VECTARR_URL', plugin_dir_url( __FILE__ ) );
 
 // Autoload module class files.
-require_once VE_PATH . 'modules/parser/class-safe-string.php';
-require_once VE_PATH . 'modules/context/class-object-proxy.php';
-require_once VE_PATH . 'modules/context/class-context.php';
-require_once VE_PATH . 'modules/library/class-library.php';
-require_once VE_PATH . 'modules/parser/class-parser.php';
+require_once VECTARR_PATH . 'modules/parser/class-safe-string.php';
+require_once VECTARR_PATH . 'modules/context/class-object-proxy.php';
+require_once VECTARR_PATH . 'modules/context/class-context.php';
+require_once VECTARR_PATH . 'modules/library/class-library.php';
+require_once VECTARR_PATH . 'modules/parser/class-parser.php';
 
 /**
  * Main plugin bootstrap class.
  *
- * Registers the `ve_logic` block attribute on all blocks, processes block
+ * Registers the `vectarr_logic` block attribute on all blocks, processes block
  * output through the expression parser, and enqueues editor assets.
  *
  * @package VectorExpressions
@@ -89,11 +89,11 @@ final class VectorExpressions {
 	 * @return string[] Modified links array.
 	 */
 	public function plugin_row_meta( array $links, string $file ): array {
-		if ( plugin_basename( VE_PATH . 'vector-expressions.php' ) !== $file ) {
+		if ( plugin_basename( VECTARR_PATH . 'vector-expressions.php' ) !== $file ) {
 			return $links;
 		}
 
-		$logo_url = esc_url( VE_URL . 'logo.svg' );
+		$logo_url = esc_url( VECTARR_URL . 'logo.svg' );
 		$logo_img = '<img src="' . $logo_url . '" width="14" height="11" alt="" aria-hidden="true" style="vertical-align:middle;margin-right:3px;">';
 
 		$links[] = $logo_img . '<a href="https://vectorarrow.com/" target="_blank" rel="noopener">'
@@ -104,7 +104,7 @@ final class VectorExpressions {
 	}
 
 	/**
-	 * Whitelist the `data-ve-expr` attribute on `<span>` tags so wp_kses_post
+	 * Whitelist the `data-vectarr-expr` attribute on `<span>` tags so wp_kses_post
 	 * does not strip expression data when a post is saved via the REST API.
 	 *
 	 * @param array<string, array<string, bool>> $allowed  Allowed tags + attributes.
@@ -117,8 +117,8 @@ final class VectorExpressions {
 				$allowed['span'] ?? [],
 				[
 					'class'           => true,
-					'data-ve-expr'    => true,
-					'data-ve-view'    => true,
+					'data-vectarr-expr'    => true,
+					'data-vectarr-view'    => true,
 					'contenteditable' => true,
 				]
 			);
@@ -226,7 +226,7 @@ final class VectorExpressions {
 	}
 
 	/**
-	 * Inject the `ve_logic` attribute schema into every registered block type.
+	 * Inject the `vectarr_logic` attribute schema into every registered block type.
 	 *
 	 * Runs on `init` so all blocks are already registered.
 	 *
@@ -236,7 +236,7 @@ final class VectorExpressions {
 		$registry = \WP_Block_Type_Registry::get_instance();
 
 		/**
-		 * Filters the default ve_logic attribute schema before it is applied.
+		 * Filters the default vectarr_logic attribute schema before it is applied.
 		 *
 		 * @param array<string, mixed> $schema The default attribute schema.
 		 */
@@ -253,8 +253,8 @@ final class VectorExpressions {
 		);
 
 		foreach ( $registry->get_all_registered() as $block_type ) {
-			if ( ! isset( $block_type->attributes['ve_logic'] ) ) {
-				$block_type->attributes['ve_logic'] = $schema;
+			if ( ! isset( $block_type->attributes['vectarr_logic'] ) ) {
+				$block_type->attributes['vectarr_logic'] = $schema;
 			}
 
 			// FORCE INJECTION: Guarantee every block receives postId from Query Loops.
@@ -275,6 +275,17 @@ final class VectorExpressions {
 	 * Evaluates visibility, class, and Pro logic instructions, applies them to
 	 * the block HTML via WP_HTML_Tag_Processor, then runs the template parser.
 	 *
+	 * SECURITY — Late Escaping:
+	 * All expression token output is sanitized inside Parser::parse() before
+	 * this method returns. The escaping strategy per token type is:
+	 *
+	 *   {{ expr }}    → htmlspecialchars( ..., ENT_QUOTES, 'UTF-8' )
+	 *   {{{ expr }}}  → wp_kses_post()  (allows safe HTML, strips <script>)
+	 *   | raw filter  → wp_kses_post()  via SafeString wrapper
+	 *   {{-- ... --}} → stripped entirely (comment syntax)
+	 *
+	 * No unescaped user-generated content reaches the return value.
+	 *
 	 * @param string               $block_content Rendered block HTML.
 	 * @param array<string, mixed> $block         Block data array.
 	 * @return string Processed block HTML, or empty string if hidden.
@@ -294,18 +305,19 @@ final class VectorExpressions {
 			return $block_content;
 		}
 
-		// Editor context: hydrate expression spans with data-ve-view instead of
+		// Editor context: hydrate expression spans with data-vectarr-view instead of
 		// running the full template parser (which would replace spans with text).
 		if ( $this->is_editor_context() ) {
 			return $this->hydrate_editor_previews( $block_content );
 		}
 
 		// Fast path: no logic or empty block.
-		if ( empty( $block['attrs']['ve_logic'] ) || '' === trim( $block_content ) ) {
+		if ( empty( $block['attrs']['vectarr_logic'] ) || '' === trim( $block_content ) ) {
+			// All expression tokens are escaped inside parse() — see class-parser.php.
 			return $this->parser->parse( $block_content );
 		}
 
-		$logic        = $block['attrs']['ve_logic'];
+		$logic        = $block['attrs']['vectarr_logic'];
 		$instructions = [
 			'render' => true,
 			'class'  => [],
@@ -342,7 +354,7 @@ final class VectorExpressions {
 		 * the $instructions array.
 		 *
 		 * @param array<string, mixed> $instructions The current render instructions.
-		 * @param array<string, mixed> $logic        The raw ve_logic attribute data.
+		 * @param array<string, mixed> $logic        The raw vectarr_logic attribute data.
 		 * @param Parser            $parser       The active parser instance.
 		 */
 		$instructions = apply_filters( 'vector_expressions/renderer/calculate_logic', $instructions, $logic, $this->parser );
@@ -360,6 +372,8 @@ final class VectorExpressions {
 			$block_content = $this->apply_html_mutations( $block_content, $instructions );
 		}
 
+		// SECURITY: All expression tokens inside $block_content are escaped by
+		// Parser::parse() — {{ }} via htmlspecialchars(), {{{ }}} via wp_kses_post().
 		return $this->parser->parse( $block_content );
 	}
 
@@ -479,19 +493,19 @@ final class VectorExpressions {
 	 * Hydrate expression token spans with evaluated preview values.
 	 *
 	 * Runs in the editor context instead of `parser->parse()` so that
-	 * `<span class="ve-expr-token" data-ve-expr="...">` elements are
-	 * preserved (not replaced with text), and `data-ve-view` is set
+	 * `<span class="vectarr-expr-token" data-vectarr-expr="...">` elements are
+	 * preserved (not replaced with text), and `data-vectarr-view` is set
 	 * to the server-evaluated result for CSS `::before` rendering.
 	 *
-	 * Also strips stale editor-only attributes (`data-ve-speculative`,
-	 * `data-ve-empty`, `data-ve-active`) that may have been persisted
+	 * Also strips stale editor-only attributes (`data-vectarr-speculative`,
+	 * `data-vectarr-empty`, `data-vectarr-active`) that may have been persisted
 	 * by older versions.
 	 *
 	 * @param string $html Block HTML content.
-	 * @return string Hydrated HTML with data-ve-view attributes set.
+	 * @return string Hydrated HTML with data-vectarr-view attributes set.
 	 */
 	private function hydrate_editor_previews( string $html ): string {
-		if ( ! str_contains( $html, 've-expr-token' ) ) {
+		if ( ! str_contains( $html, 'vectarr-expr-token' ) ) {
 			return $html;
 		}
 
@@ -501,8 +515,8 @@ final class VectorExpressions {
 		try {
 			$tags = new \WP_HTML_Tag_Processor( $html );
 
-			while ( $tags->next_tag( [ 'tag_name' => 'SPAN', 'class_name' => 've-expr-token' ] ) ) {
-				$expr = $tags->get_attribute( 'data-ve-expr' );
+			while ( $tags->next_tag( [ 'tag_name' => 'SPAN', 'class_name' => 'vectarr-expr-token' ] ) ) {
+				$expr = $tags->get_attribute( 'data-vectarr-expr' );
 				if ( ! $expr ) {
 					continue;
 				}
@@ -517,18 +531,18 @@ final class VectorExpressions {
 					$view = '';
 				}
 
-				$tags->set_attribute( 'data-ve-view', $view );
+				$tags->set_attribute( 'data-vectarr-view', $view );
 
 				// Flag empty views so CSS can show a placeholder.
 				if ( '' === trim( str_replace( "\xC2\xA0", '', $view ) ) ) {
-					$tags->set_attribute( 'data-ve-empty', '' );
+					$tags->set_attribute( 'data-vectarr-empty', '' );
 				} else {
-					$tags->remove_attribute( 'data-ve-empty' );
+					$tags->remove_attribute( 'data-vectarr-empty' );
 				}
 
 				// Strip stale attributes from older saves.
-				$tags->remove_attribute( 'data-ve-speculative' );
-				$tags->remove_attribute( 'data-ve-active' );
+				$tags->remove_attribute( 'data-vectarr-speculative' );
+				$tags->remove_attribute( 'data-vectarr-active' );
 			}
 
 			return $tags->get_updated_html();
@@ -540,7 +554,7 @@ final class VectorExpressions {
 	/**
 	 * Strip HTML tags and decode entities for editor preview display.
 	 *
-	 * Preview values are rendered via CSS `content: attr(data-ve-view)`,
+	 * Preview values are rendered via CSS `content: attr(data-vectarr-view)`,
 	 * which treats its input as plain text. Any HTML tags or encoded
 	 * entities would appear literally, so we strip them here.
 	 *
@@ -555,8 +569,11 @@ final class VectorExpressions {
 	/**
 	 * Run the expression parser over post content (the_content filter).
 	 *
+	 * SECURITY: Parser::parse() applies late escaping to all expression tokens
+	 * (htmlspecialchars for {{ }}, wp_kses_post for {{{ }}} and | raw).
+	 *
 	 * @param string $content Raw post content HTML.
-	 * @return string Parsed content with all expressions resolved.
+	 * @return string Parsed content with all expressions resolved and escaped.
 	 */
 	public function render_content( string $content ): string {
 		// Explicitly protect the global post content to prevent the layout from 
@@ -579,14 +596,14 @@ final class VectorExpressions {
 	 */
 	public function enqueue_assets(): void {
 		wp_enqueue_script(
-			've-editor',
-			VE_URL . 'dist/editor.js',
+			'vectarr-editor',
+			VECTARR_URL . 'dist/editor.js',
 			[ 'wp-blocks', 'wp-element', 'wp-components', 'wp-data', 'wp-i18n', 'wp-compose', 'wp-block-editor', 'wp-rich-text', 'wp-hooks', 'wp-plugins', 'wp-editor', 'wp-edit-post' ],
-			VE_VERSION,
+			VECTARR_VERSION,
 			true
 		);
 
-		wp_set_script_translations( 've-editor', 'vector-expressions', VE_PATH . 'languages' );
+		wp_set_script_translations( 'vectarr-editor', 'vector-expressions', VECTARR_PATH . 'languages' );
 
 		/**
 		 * Filters the context data exposed to the block editor JS.
@@ -634,7 +651,7 @@ final class VectorExpressions {
 			]
 		);
 
-		wp_localize_script( 've-editor', 'veContext', $context );
+		wp_localize_script( 'vectarr-editor', 'vectarrContext', $context );
 	}
 
 	/**
@@ -651,10 +668,10 @@ final class VectorExpressions {
 		}
 
 		wp_enqueue_style(
-			've-editor-css',
-			VE_URL . 'dist/editor.css',
+			'vectarr-editor-css',
+			VECTARR_URL . 'dist/editor.css',
 			[],
-			VE_VERSION
+			VECTARR_VERSION
 		);
 	}
 }

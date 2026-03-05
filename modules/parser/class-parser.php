@@ -52,8 +52,19 @@ class Parser {
 	/**
 	 * Parse a template string and replace all {{ }} / {{{ }}} / {{-- --}} tokens.
 	 *
+	 * SECURITY — Late Escaping Contract:
+	 * This method is the single point of late escaping for all expression output.
+	 * Every token replacement is individually escaped before insertion:
+	 *
+	 *   {{ expr }}    → htmlspecialchars( $value, ENT_QUOTES, 'UTF-8' )
+	 *   {{{ expr }}}  → wp_kses_post( $value )  — allows safe HTML subset
+	 *   | raw filter  → wp_kses_post( $value )  via SafeString wrapper
+	 *   {{-- ... --}} → '' (comment, stripped entirely)
+	 *
+	 * No raw user-generated content bypasses these escaping paths.
+	 *
 	 * @param mixed $template The raw template string (non-strings are returned as-is).
-	 * @return mixed The rendered output.
+	 * @return mixed The rendered output with all tokens escaped.
 	 */
 	public function parse( mixed $template ): mixed {
 		if ( ! is_string( $template ) ) {
@@ -89,16 +100,18 @@ class Parser {
 			);
 		}
 
-		// ---- Step 2b: Process HTML format pills (<span data-ve-expr="...">preview</span>) ------
-		if ( str_contains( $template, 'data-ve-expr' ) ) {
+		// ---- Step 2b: Process HTML format pills (<span data-vectarr-expr="...">preview</span>) ------
+		if ( str_contains( $template, 'data-vectarr-expr' ) ) {
 			$template = preg_replace_callback(
-				'/<span\b[^>]*\bdata-ve-expr="([^"]+)"[^>]*>.*?<\/span>/is',
+				'/<span\b[^>]*\bdata-vectarr-expr="([^"]+)"[^>]*>.*?<\/span>/is',
 				function ( array $m ): string {
 					$expr = html_entity_decode( $m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 					try {
 						$val = $this->evaluate( $expr );
 						if ( is_object( $val ) && isset( $val->__ve_safe ) ) {
-							return (string) $val;
+							// SECURITY: wp_kses_post at the parser boundary guarantees
+							// late escaping even if the SafeString origin skipped it.
+							return wp_kses_post( (string) $val );
 						}
 						return htmlspecialchars( $this->safe_string( $val ), ENT_QUOTES, 'UTF-8' );
 					} catch ( \Throwable $e ) {
@@ -109,7 +122,7 @@ class Parser {
 						 * @param string    $expr The expression string that failed.
 						 */
 						do_action( 'vector_expressions/error', $e, $expr );
-						return defined( 'WP_DEBUG' ) && WP_DEBUG && ( ! defined( 'WP_DEBUG_DISPLAY' ) || WP_DEBUG_DISPLAY ) ? '<!-- VE Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
+						return defined( 'WP_DEBUG' ) && WP_DEBUG && ( ! defined( 'WP_DEBUG_DISPLAY' ) || WP_DEBUG_DISPLAY ) ? '<!-- VECTARR Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
 					}
 				},
 				$template
@@ -137,7 +150,10 @@ class Parser {
 					$val = apply_filters( 'vector_expressions/parser/render_token', $val, $expr, $is_raw );
 
 					if ( is_object( $val ) && isset( $val->__ve_safe ) ) {
-						return (string) $val;
+						// SECURITY: wp_kses_post at the parser boundary guarantees
+						// late escaping, even for SafeStrings from extensions via
+						// the 'vector_expressions/parser/render_token' filter.
+						return wp_kses_post( (string) $val );
 					}
 
 					if ( $is_raw ) {
@@ -155,7 +171,7 @@ class Parser {
 					 * @param string    $expr The expression string that failed.
 					 */
 					do_action( 'vector_expressions/error', $e, $expr );
-					return defined( 'WP_DEBUG' ) && WP_DEBUG && ( ! defined( 'WP_DEBUG_DISPLAY' ) || WP_DEBUG_DISPLAY ) ? '<!-- VE Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
+					return defined( 'WP_DEBUG' ) && WP_DEBUG && ( ! defined( 'WP_DEBUG_DISPLAY' ) || WP_DEBUG_DISPLAY ) ? '<!-- VECTARR Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
 				}
 			},
 			$template

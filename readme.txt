@@ -61,6 +61,11 @@ Append a CSS class to the block's root element based on an expression:
 
 For a full reference of the Expression Language, visit the plugin website or the GitHub repository.
 
+== Development ==
+
+The source code for this plugin, including all build tools and un-compiled JavaScript modules, is maintained at:
+https://github.com/samuel-reinhardt/vector-expressions
+
 == Installation ==
 
 1. Upload the plugin files to the `/wp-content/plugins/vector-expressions` directory, or install the plugin through the WordPress plugins screen directly.

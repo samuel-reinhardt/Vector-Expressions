@@ -25,10 +25,10 @@ import { fetchPreview } from "./api.js";
 const { select } = window.wp.data;
 
 /**
- * Regex that matches a `<span … data-ve-expr="…" …>` opening tag.
+ * Regex that matches a `<span … data-vectarr-expr="…" …>` opening tag.
  * Group 1: full tag interior, Group 2: expr value.
  */
-const SPAN_TAG_RE = /<span\b([^>]*\bdata-ve-expr="([^"]*)"[^>]*)>/gi;
+const SPAN_TAG_RE = /<span\b([^>]*\bdata-vectarr-expr="([^"]*)"[^>]*)>/gi;
 
 // ─── Client-side Expression Resolver ────────────────────────────────────────
 
@@ -155,7 +155,7 @@ const stripHtml = (html) => {
 /**
  * Strip HTML tags and decode entities for preview-safe plain text.
  *
- * Preview values are rendered via CSS `content: attr(data-ve-view)`,
+ * Preview values are rendered via CSS `content: attr(data-vectarr-view)`,
  * which treats its input as plain text. This ensures any residual
  * HTML (e.g. WooCommerce price markup) is converted to readable text.
  *
@@ -173,7 +173,7 @@ const cleanPreview = (val) => {
 /**
  * Decode HTML entities in an attribute value captured from raw HTML.
  *
- * Expression attributes are stored as `data-ve-expr="&quot;now&quot;"`
+ * Expression attributes are stored as `data-vectarr-expr="&quot;now&quot;"`
  * in the HTML string. The regex captures `&quot;now&quot;` literally,
  * but the parser and REST API expect the decoded form `"now"`.
  *
@@ -265,7 +265,7 @@ export const useHydrateViews = (
 
     const raw = attributes[attrName];
     const html = typeof raw === "string" ? raw : String(raw ?? "");
-    if (!html.includes("ve-expr-token")) return;
+    if (!html.includes("vectarr-expr-token")) return;
 
     const editorPostId = select("core/editor")?.getCurrentPostId?.() || 0;
     const isQueryChild = postId !== editorPostId;
@@ -280,8 +280,8 @@ export const useHydrateViews = (
     html.replace(SPAN_TAG_RE, (_match, tagInner, rawExpr) => {
       if (!rawExpr) return;
       // Skip spans that already have a non-empty view (already hydrated).
-      // Empty views (data-ve-view="") must be re-hydrated.
-      const existingView = tagInner.match(/\bdata-ve-view="([^"]*)"/)?.[1];
+      // Empty views (data-vectarr-view="") must be re-hydrated.
+      const existingView = tagInner.match(/\bdata-vectarr-view="([^"]*)"/)?.[1];
       if (existingView && !isQueryChild) return;
 
       const expr = decodeAttr(rawExpr);
@@ -338,7 +338,7 @@ export const useHydrateViews = (
   }, [attributes[attrName], postId]);
 
   // For Query Loop blocks: re-apply cached views after EVERY render.
-  // React re-renders destroy DOM-only attributes (data-ve-view) on click,
+  // React re-renders destroy DOM-only attributes (data-vectarr-view) on click,
   // selection change, or modal apply. This effect runs with no deps so it
   // fires after each reconciliation and re-stamps the cached values.
   // It only writes to DOM attributes — no state changes — so it cannot
@@ -356,14 +356,14 @@ export const useHydrateViews = (
 // ─── Attribute-based hydration (top-level blocks) ───────────────────────────
 
 /**
- * Inject `data-ve-view` into the HTML string and write back via setAttributes.
+ * Inject `data-vectarr-view` into the HTML string and write back via setAttributes.
  * Used for blocks NOT inside a Query Loop (each has its own attributes).
  */
 const applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
   const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, rawExpr) => {
     if (!rawExpr) return fullMatch;
     // Skip spans that already have a non-empty view.
-    const existingView = tagInner.match(/\bdata-ve-view="([^"]*)"/)?.[1];
+    const existingView = tagInner.match(/\bdata-vectarr-view="([^"]*)"/)?.[1];
     if (existingView) return fullMatch;
 
     const expr = decodeAttr(rawExpr);
@@ -373,11 +373,11 @@ const applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
     const cleaned = cleanPreview(view);
     const safeView = cleaned.replace(/"/g, "&quot;");
     const isEmpty = !cleaned.trim().replace(/\u00a0/g, "");
-    const emptyAttr = isEmpty ? ' data-ve-empty=""' : "";
+    const emptyAttr = isEmpty ? ' data-vectarr-empty=""' : "";
 
     return fullMatch.replace(
       tagInner,
-      tagInner + ` data-ve-view="${safeView}"${emptyAttr}`,
+      tagInner + ` data-vectarr-view="${safeView}"${emptyAttr}`,
     );
   });
 
@@ -390,7 +390,7 @@ const applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
 // ─── DOM-based hydration (Query Loop blocks) ────────────────────────────────
 
 /**
- * Write `data-ve-view` directly to DOM elements for a specific block instance.
+ * Write `data-vectarr-view` directly to DOM elements for a specific block instance.
  * Used for blocks inside Query Loops where setAttributes would clobber other
  * iterations' values (since all iterations share one template).
  *
@@ -407,21 +407,21 @@ const applyViewsDOM = (postId, clientId) => {
   const scope =
     postWrapper || root.querySelector(`[data-block="${clientId}"]`) || root;
 
-  const spans = scope.querySelectorAll("span.ve-expr-token");
+  const spans = scope.querySelectorAll("span.vectarr-expr-token");
   spans.forEach((span) => {
-    const expr = span.getAttribute("data-ve-expr");
+    const expr = span.getAttribute("data-vectarr-expr");
     if (!expr) return;
 
     const view = viewCache.get(cacheKey(expr, postId));
     if (view === undefined) return;
 
     const cleaned = cleanPreview(view);
-    span.setAttribute("data-ve-view", cleaned);
+    span.setAttribute("data-vectarr-view", cleaned);
     const isEmpty = !cleaned.trim().replace(/\u00a0/g, "");
     if (isEmpty) {
-      span.setAttribute("data-ve-empty", "");
+      span.setAttribute("data-vectarr-empty", "");
     } else {
-      span.removeAttribute("data-ve-empty");
+      span.removeAttribute("data-vectarr-empty");
     }
   });
 };

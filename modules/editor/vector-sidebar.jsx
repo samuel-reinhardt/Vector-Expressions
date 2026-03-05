@@ -44,7 +44,7 @@ const SidebarIcon = () => (
  * Tab icon helper — renders a Dashicon-style SVG with a native tooltip.
  */
 const TabIcon = ( { label, children } ) => (
-	<span className="ve-tab-icon" title={ label } aria-label={ label }>
+	<span className="vectarr-tab-icon" title={ label } aria-label={ label }>
 		{ children }
 	</span>
 );
@@ -90,16 +90,16 @@ const ExpressionTabContent = () => {
 	};
 
 	return (
-		<div className="ve-expression-editor">
+		<div className="vectarr-expression-editor">
 			{/* Expression Input */}
-			<div className="ve-expr-editor-field">
+			<div className="vectarr-expr-editor-field">
 				<label className="components-base-control__label">
 					{ __( 'Expression', 'vector-expressions' ) }
 				</label>
-				<div className="ve-expr-field">
-					<span className="ve-expr-brace" aria-hidden="true">{'{{ '}</span>
+				<div className="vectarr-expr-field">
+					<span className="vectarr-expr-brace" aria-hidden="true">{'{{ '}</span>
 					<AutoTextarea
-						className="ve-expr-input ve-class-textarea"
+						className="vectarr-expr-input vectarr-class-textarea"
 						value={ expr }
 						onChange={ updateExpr }
 						placeholder="user.is_logged_in"
@@ -116,12 +116,12 @@ const ExpressionTabContent = () => {
 							}
 						} }
 					/>
-					<span className="ve-expr-brace" aria-hidden="true">{' }}'}</span>
+					<span className="vectarr-expr-brace" aria-hidden="true">{' }}'}</span>
 				</div>
 			</div>
 
 			{/* Live Preview */}
-			<div className="ve-live-preview" style={ {
+			<div className="vectarr-live-preview" style={ {
 				display: 'flex',
 				alignItems: 'center',
 				justifyContent: 'space-between',
@@ -183,7 +183,7 @@ const ExpressionTabContent = () => {
  * Pro extends this via the `vectorExpressions.sidebar.tabs` filter.
  */
 const DEFAULT_TABS = [
-	{ name: 'logic', title: <LogicTabIcon />, className: 've-sidebar-tab' },
+	{ name: 'logic', title: <LogicTabIcon />, className: 'vectarr-sidebar-tab' },
 ];
 
 /**
@@ -209,25 +209,25 @@ const VectorSidebarPanel = () => {
 		const exprTab = {
 			name: 'expression',
 			title: <ExpressionTabIcon />,
-			className: 've-sidebar-tab ve-sidebar-tab--expr',
+			className: 'vectarr-sidebar-tab vectarr-sidebar-tab--expr',
 		};
 		return [ exprTab, ...baseTabs ];
 	}, [ isTokenActive, baseTabs ] );
 
 	if ( ! selectedBlock ) {
 		return (
-			<div className="ve-sidebar-empty">
+			<div className="vectarr-sidebar-empty">
 				<p>{ __( 'Select a block to edit its Vector settings.', 'vector-expressions' ) }</p>
 			</div>
 		);
 	}
 
 	const { clientId, attributes } = selectedBlock;
-	const ve_logic = attributes?.ve_logic;
+	const vectarr_logic = attributes?.vectarr_logic;
 
 	const update = ( key, val ) => {
 		updateBlockAttributes( clientId, {
-			ve_logic: { ...( ve_logic ?? {} ), [ key ]: val },
+			vectarr_logic: { ...( vectarr_logic ?? {} ), [ key ]: val },
 		} );
 	};
 
@@ -236,17 +236,17 @@ const VectorSidebarPanel = () => {
 		const tabName = tabs[0]?.name || 'logic';
 		if ( tabName === 'expression' ) {
 			return (
-				<div className="ve-sidebar-tab-content">
+				<div className="vectarr-sidebar-tab-content">
 					<ExpressionTabContent />
 				</div>
 			);
 		}
 		return (
-			<div className="ve-sidebar-tab-content">
+			<div className="vectarr-sidebar-tab-content">
 				{ applyFilters(
 					`vectorExpressions.sidebar.tab.${ tabName }`,
 					null,
-					ve_logic,
+					vectarr_logic,
 					update,
 					blockName,
 				) }
@@ -260,18 +260,18 @@ const VectorSidebarPanel = () => {
 	return (
 		<TabPanel
 			key={ isTokenActive ? 'with-expr' : 'without-expr' }
-			className="ve-sidebar-tabs"
+			className="vectarr-sidebar-tabs"
 			tabs={ tabs }
 			initialTabName={ initialTab }
 		>
 			{ ( tab ) => (
-				<div className="ve-sidebar-tab-content">
+				<div className="vectarr-sidebar-tab-content">
 					{ tab.name === 'expression'
 						? <ExpressionTabContent />
 						: applyFilters(
 							`vectorExpressions.sidebar.tab.${ tab.name }`,
 							null,
-							ve_logic,
+							vectarr_logic,
 							update,
 							blockName,
 						)
@@ -299,7 +299,7 @@ export const registerVectorSidebar = () => {
 					name={ SIDEBAR_NAME }
 					title={ __( 'Vector Expressions', 'vector-expressions' ) }
 					icon={ <SidebarIcon /> }
-					className="ve-sidebar"
+					className="vectarr-sidebar"
 				>
 					<VectorSidebarPanel />
 				</PluginSidebar>

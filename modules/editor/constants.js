@@ -5,7 +5,7 @@
  * rather than re-created on every render or repeated inline.
  */
 
-const ctx = window.veContext || {};
+const ctx = window.vectarrContext || {};
 
 // Brand-colored SVG icon strings used by root chips.
 const ICON_POST = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -459,13 +459,13 @@ export const SKIP_CONVERT_BLOCKS = new Set([
 
 /**
  * Matches:
- *   Group 1 — An already-converted <span class="ve-expr-token"> element (skip).
+ *   Group 1 — An already-converted <span class="vectarr-expr-token"> element (skip).
  *   Group 2 — A <code> or <pre> block (skip).
  *   Group 3 — A bare {{ expr }} template tag (convert).
  *   Group 4 — The expression inside the {{ }} (capture group within 3).
  */
 export const TOKEN_REGEX =
-  /(<span\b[^>]*\bclass="ve-expr-token"[^>]*>[\s\S]*?<\/span>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
+  /(<span\b[^>]*\bclass="vectarr-expr-token"[^>]*>[\s\S]*?<\/span>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
 
 /** Milliseconds to wait before auto-focusing the popover expression input. */
 export const POPOVER_FOCUS_DELAY = 50;

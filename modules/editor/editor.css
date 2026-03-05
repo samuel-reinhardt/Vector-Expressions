@@ -1,23 +1,23 @@
 /**
  * @property registrations — force eager computation of inherited values.
  *
- * Without @property, `--ve-ctx-fs: 1em` is stored as the string "1em" and
+ * Without @property, `--vectarr-ctx-fs: 1em` is stored as the string "1em" and
  * resolved lazily at the point of USE. When ::before (inside the mark with
- * font-size:0) reads var(--ve-ctx-fs), the 1em resolves against 0 → 0px.
+ * font-size:0) reads var(--vectarr-ctx-fs), the 1em resolves against 0 → 0px.
  *
  * @property { syntax: '<length>' } makes the browser resolve 1em at the
  * DECLARING element's font-size (e.g. 32px on an h1). The token inherits
  * the computed 32px, and ::before correctly renders at that size.
  *
- * Same principle for --ve-ctx-color with currentColor.
+ * Same principle for --vectarr-ctx-color with currentColor.
  */
-@property --ve-ctx-fs {
+@property --vectarr-ctx-fs {
 	syntax:        "<length>";
 	inherits:      true;
 	initial-value: 16px;
 }
 
-@property --ve-ctx-color {
+@property --vectarr-ctx-color {
 	syntax:        "<color>";
 	inherits:      true;
 	initial-value: #000;
@@ -31,19 +31,19 @@
  * Design tokens — scoped to the WP editor so they do not leak to the frontend.
  */
 .editor-styles-wrapper {
-	--ve-upsell-bg:      #eaf7f1;
-	--ve-upsell-border:  #5df4a3;
-	--ve-upsell-padding: 10px;
-	--ve-font-sm:        12px;
-	--ve-locked-opacity: 0.6;
-	--ve-logo-size:      16px;
-	--ve-logo-icon:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-376 -15 92 126'%3E%3Cg fill='%230d6632'%3E%3Cpath d='M-372.384 54.856V40.32q5.39-.242 7.935-2.12 2.604-1.878 3.937-5.875 1.393-3.998 1.393-13.507 0-11.993 1.09-16.354 1.09-4.421 3.453-7.026 2.422-2.665 7.026-4.361 4.664-1.696 13.386-1.696h3.21v14.537q-6.481 0-8.48.727-1.999.666-2.968 2.241-.909 1.575-.909 5.815 0 7.632-.726 17.02-.485 6.117-3.332 10.963-2.12 3.574-7.329 6.965 4.422 2.544 7.026 6.481 2.605 3.877 3.453 9.873.363 2.604.848 16.96.181 5.269.666 6.541.787 1.878 2.907 2.847 2.181.969 8.843.969v14.476h-3.21q-8.783 0-13.023-1.454-4.24-1.393-6.905-4.179-2.665-2.726-3.876-6.965-1.151-4.18-1.151-14.476 0-11.508-1.272-15.506-1.211-4.058-3.876-6.057-2.605-1.999-8.117-2.302z'/%3E%3Cpath d='M-329.857 54.856V40.32q5.39-.242 7.934-2.12 2.605-1.878 3.937-5.875 1.393-3.998 1.393-13.507 0-11.993 1.09-16.354 1.09-4.421 3.453-7.026 2.423-2.665 7.026-4.361 4.664-1.696 13.386-1.696h3.21v14.537q-6.481 0-8.48.727-1.998.666-2.968 2.241-.908 1.575-.908 5.815 0 7.632-.727 17.02-.485 6.117-3.331 10.963-2.12 3.574-7.329 6.965 4.422 2.544 7.026 6.481 2.605 3.877 3.453 9.873.363 2.604.848 16.96.181 5.269.666 6.541.787 1.878 2.907 2.847 2.181.969 8.843.969v14.476h-3.21q-8.783 0-13.023-1.454-4.24-1.393-6.905-4.179-2.665-2.726-3.876-6.965-1.151-4.18-1.151-14.476 0-11.508-1.272-15.506-1.211-4.058-3.876-6.057-2.605-1.999-8.117-2.302z'/%3E%3C/g%3E%3C/svg%3E");
+	--vectarr-upsell-bg:      #eaf7f1;
+	--vectarr-upsell-border:  #5df4a3;
+	--vectarr-upsell-padding: 10px;
+	--vectarr-font-sm:        12px;
+	--vectarr-locked-opacity: 0.6;
+	--vectarr-logo-size:      16px;
+	--vectarr-logo-icon:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-376 -15 92 126'%3E%3Cg fill='%230d6632'%3E%3Cpath d='M-372.384 54.856V40.32q5.39-.242 7.935-2.12 2.604-1.878 3.937-5.875 1.393-3.998 1.393-13.507 0-11.993 1.09-16.354 1.09-4.421 3.453-7.026 2.422-2.665 7.026-4.361 4.664-1.696 13.386-1.696h3.21v14.537q-6.481 0-8.48.727-1.999.666-2.968 2.241-.909 1.575-.909 5.815 0 7.632-.726 17.02-.485 6.117-3.332 10.963-2.12 3.574-7.329 6.965 4.422 2.544 7.026 6.481 2.605 3.877 3.453 9.873.363 2.604.848 16.96.181 5.269.666 6.541.787 1.878 2.907 2.847 2.181.969 8.843.969v14.476h-3.21q-8.783 0-13.023-1.454-4.24-1.393-6.905-4.179-2.665-2.726-3.876-6.965-1.151-4.18-1.151-14.476 0-11.508-1.272-15.506-1.211-4.058-3.876-6.057-2.605-1.999-8.117-2.302z'/%3E%3Cpath d='M-329.857 54.856V40.32q5.39-.242 7.934-2.12 2.605-1.878 3.937-5.875 1.393-3.998 1.393-13.507 0-11.993 1.09-16.354 1.09-4.421 3.453-7.026 2.423-2.665 7.026-4.361 4.664-1.696 13.386-1.696h3.21v14.537q-6.481 0-8.48.727-1.998.666-2.968 2.241-.908 1.575-.908 5.815 0 7.632-.727 17.02-.485 6.117-3.331 10.963-2.12 3.574-7.329 6.965 4.422 2.544 7.026 6.481 2.605 3.877 3.453 9.873.363 2.604.848 16.96.181 5.269.666 6.541.787 1.878 2.907 2.847 2.181.969 8.843.969v14.476h-3.21q-8.783 0-13.023-1.454-4.24-1.393-6.905-4.179-2.665-2.726-3.876-6.965-1.151-4.18-1.151-14.476 0-11.508-1.272-15.506-1.211-4.058-3.876-6.057-2.605-1.999-8.117-2.302z'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 /**
  * Panel title — logo + label inline.
  */
-.ve-panel-title {
+.vectarr-panel-title {
 	display: inline-flex;
 	align-items: center;
 	gap: 10px;
@@ -52,15 +52,15 @@
 /**
  * Section dividers — VISIBILITY / DYNAMIC CLASS grouping.
  *
- * `.ve-section` adds consistent vertical rhythm between control groups.
- * `.ve-section--bordered` adds a top separator to visually distinguish
+ * `.vectarr-section` adds consistent vertical rhythm between control groups.
+ * `.vectarr-section--bordered` adds a top separator to visually distinguish
  * the Dynamic Class section from the Visibility group above it.
  */
-.ve-section {
+.vectarr-section {
 	padding-bottom: 4px;
 }
 
-.ve-section--bordered {
+.vectarr-section--bordered {
 	padding-top: 16px;
 	margin-top: 8px;
 	border-top: 1px solid #e0e0e0;
@@ -69,25 +69,25 @@
 /**
  * Condition field — extra top margin to separate from the Action select.
  */
-.ve-condition-field {
+.vectarr-condition-field {
 	margin-top: 12px;
 }
 
 /**
  * Expression field wrapper — flanks the textarea with decorative {{ }}.
  */
-.ve-expr-field {
+.vectarr-expr-field {
 	display: flex;
 	align-items: flex-start;
 	gap: 0;
 }
 
-.ve-expr-field .ve-class-textarea {
+.vectarr-expr-field .vectarr-class-textarea {
 	flex: 1;
 	min-width: 0;
 }
 
-.ve-expr-brace {
+.vectarr-expr-brace {
 	font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
 	font-size: 14px;
 	font-weight: 600;
@@ -101,7 +101,7 @@
  * Section label — small uppercase category header, matching WP's
  * ToolsPanel and similar grouping patterns in the block editor.
  */
-.ve-section-label {
+.vectarr-section-label {
 	margin: 0 0 10px;
 	font-size: 10px;
 	font-weight: 500;
@@ -110,9 +110,9 @@
 	color: #757575;
 }
 
-.ve-logo {
-	width:       var( --ve-logo-size );
-	height:      var( --ve-logo-size );
+.vectarr-logo {
+	width:       var( --vectarr-logo-size );
+	height:      var( --vectarr-logo-size );
 	flex-shrink: 0;
 }
 
@@ -120,8 +120,8 @@
  * Locked panel — used for Pro-gated UI sections.
  * Greys out and disables pointer interaction on non-Pro installs.
  */
-.ve-locked-panel {
-	opacity: var( --ve-locked-opacity );
+.vectarr-locked-panel {
+	opacity: var( --vectarr-locked-opacity );
 	pointer-events: none;
 	filter: grayscale( 100% );
 }
@@ -129,61 +129,61 @@
 /**
  * Upsell notice — displayed beneath locked panels when Pro is not active.
  */
-.ve-upsell {
-	margin-top: var( --ve-upsell-padding );
-	padding: var( --ve-upsell-padding );
-	background: var( --ve-upsell-bg );
-	border-left: 4px solid var( --ve-upsell-border );
-	font-size: var( --ve-font-sm );
+.vectarr-upsell {
+	margin-top: var( --vectarr-upsell-padding );
+	padding: var( --vectarr-upsell-padding );
+	background: var( --vectarr-upsell-bg );
+	border-left: 4px solid var( --vectarr-upsell-border );
+	font-size: var( --vectarr-font-sm );
 }
 
-.ve-upsell a {
+.vectarr-upsell a {
 	text-decoration: none;
 	font-weight: bold;
 }
 
 /**
- * Syntax reference toggle + table — now lives inside .ve-section,
+ * Syntax reference toggle + table — now lives inside .vectarr-section,
  * so top border/padding replaces the former standalone separator.
  */
-.ve-syntax-ref-wrap {
+.vectarr-syntax-ref-wrap {
 	margin-top: 10px;
 }
 
-.ve-syntax-ref-toggle {
-	font-size: var( --ve-font-sm );
+.vectarr-syntax-ref-toggle {
+	font-size: var( --vectarr-font-sm );
 	color: #757575;
 	text-decoration: none !important;
 	padding: 0 !important;
 }
 
-.ve-syntax-ref {
+.vectarr-syntax-ref {
 	width: 100%;
 	border-collapse: collapse;
-	font-size: var( --ve-font-sm );
+	font-size: var( --vectarr-font-sm );
 	margin-top: 6px;
 }
 
-.ve-syntax-ref td,
-.ve-syntax-ref th {
+.vectarr-syntax-ref td,
+.vectarr-syntax-ref th {
 	padding: 3px 4px;
 	text-align: left;
 	vertical-align: middle;
 }
 
-.ve-syntax-ref td:first-child {
+.vectarr-syntax-ref td:first-child {
 	width: 55%;
 	white-space: nowrap;
 }
 
-.ve-syntax-ref code {
+.vectarr-syntax-ref code {
 	font-size: 11px;
 	background: #f0f0f0;
 	padding: 1px 4px;
 	border-radius: 3px;
 }
 
-.ve-ref-head th {
+.vectarr-ref-head th {
 	padding-top: 8px;
 	font-size: 10px;
 	text-transform: uppercase;
@@ -196,14 +196,14 @@
  *
  * font-size:0 on the token element hides the inner {{ expr }} storage text,
  * but ::before inherits that 0 — making em units useless there. The trick:
- * declare --ve-ctx-fs and --ve-ctx-color on *every element except the token
- * itself*. Because .ve-expr-token is excluded, it inherits the parent's
+ * declare --vectarr-ctx-fs and --vectarr-ctx-color on *every element except the token
+ * itself*. Because .vectarr-expr-token is excluded, it inherits the parent's
  * already-computed values (e.g. 32px on an <h1>, white inside a dark block)
  * rather than re-evaluating them against its own font-size:0 / color.
  */
-.editor-styles-wrapper *:not( .ve-expr-token ) {
-	--ve-ctx-fs:    1em;          /* resolves at each element's own size */
-	--ve-ctx-color: currentColor; /* resolves at each element's own color */
+.editor-styles-wrapper *:not( .vectarr-expr-token ) {
+	--vectarr-ctx-fs:    1em;          /* resolves at each element's own size */
+	--vectarr-ctx-color: currentColor; /* resolves at each element's own color */
 }
 
 /**
@@ -217,7 +217,7 @@
  * font-size:0 erases the inner {{ expr }} storage text from the layout.
  * ::before re-renders the view value at the captured parent size/color.
  */
-.ve-expr-token {
+.vectarr-expr-token {
 	/* Erase badge chrome */
 	background:    transparent;
 	border:        none;
@@ -240,11 +240,11 @@
 	cursor:         pointer!important;
 }
 
-.ve-expr-token::before {
-	content: attr( data-ve-view );
+.vectarr-expr-token::before {
+	content: attr( data-vectarr-view );
 
 	/* Restore parent size and color via the captured custom properties */
-	font-size: var( --ve-ctx-fs,    1rem );
+	font-size: var( --vectarr-ctx-fs,    1rem );
 
 	/* Keep surrounding typographic context */
 	font-family: inherit;
@@ -259,33 +259,33 @@
 }
 
 /*
- * Placeholder: shown when view is absent or empty (no [data-ve-view] attr).
+ * Placeholder: shown when view is absent or empty (no [data-vectarr-view] attr).
  * Shown before PHP hydrate_editor_previews() injects the live value.
  */
-.ve-expr-token:not([data-ve-view])::before,
-.ve-expr-token[data-ve-view=""]::before {
+.vectarr-expr-token:not([data-vectarr-view])::before,
+.vectarr-expr-token[data-vectarr-view=""]::before {
 	content:             'Dynamic';
 	opacity:             0.55;
 	font-style:          italic;
 	padding-left:        1.1em;
-	background-image:    var( --ve-logo-icon );
+	background-image:    var( --vectarr-logo-icon );
 	background-repeat:   no-repeat;
 	background-size:     0.85em 0.85em;
 	background-position: left center;
 }
 
 /*
- * [data-ve-empty] is set by JS Pass-2 when the expression resolved to a
+ * [data-vectarr-empty] is set by JS Pass-2 when the expression resolved to a
  * visually-empty value: boolean false → "", 0 → "0", whitespace-only, etc.
  * The chip must still be visible and selectable so the user can find and
  * edit or delete it.
  */
-.ve-expr-token[data-ve-empty]::before {
+.vectarr-expr-token[data-vectarr-empty]::before {
 	content:             'Dynamic';
 	opacity:             0.55;
 	font-style:          italic;
 	padding-left:        1.1em;
-	background-image:    var( --ve-logo-icon );
+	background-image:    var( --vectarr-logo-icon );
 	background-repeat:   no-repeat;
 	background-size:     0.85em 0.85em;
 	background-position: left center;
@@ -295,7 +295,7 @@
 }
 
 /* Hover: signal interactivity by solidifying the underline */
-.ve-expr-token:hover::before {
+.vectarr-expr-token:hover::before {
 	text-decoration-style: solid;
 	text-decoration-color: #5df4a3;
 	outline-width: 0!important;
@@ -306,12 +306,12 @@
 /**
  * Active / cursor-on-token state.
  *
- * [data-ve-active] is managed by our useEffect (reliable, toggles with isActive).
+ * [data-vectarr-active] is managed by our useEffect (reliable, toggles with isActive).
  * [data-rich-text-format-boundary] is Gutenberg's native attribute (kept as
  * fallback but we clean it up when isActive=false to prevent persistence).
  */
-.ve-expr-token[data-ve-active]::before,
-.ve-expr-token[data-rich-text-format-boundary]::before {
+.vectarr-expr-token[data-vectarr-active]::before,
+.vectarr-expr-token[data-rich-text-format-boundary]::before {
 	outline:      	2px solid #5df4a3!important;
 	outline-offset: 2px;
 	border-radius:  2px;
@@ -323,7 +323,7 @@
  */
 
 /* Make the TextControl input visually stronger — higher contrast text + border */
-.ve-pill-popover .components-text-control__input {
+.vectarr-pill-popover .components-text-control__input {
 	background: #fff;
 	color: #1e1e1e;
 	border: 1.5px solid #949494;
@@ -332,21 +332,21 @@
 	font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
 	padding: 6px 10px;
 }
-.ve-pill-popover .components-text-control__input:focus {
+.vectarr-pill-popover .components-text-control__input:focus {
 	border-color: #5df4a3;
 	box-shadow: 0 0 0 1.5px #5df4a3;
 	outline: none;
 }
 
 /* Brand styling for the primary apply button */
-.ve-pill-popover .components-button.is-primary {
+.vectarr-pill-popover .components-button.is-primary {
 	background: #5df4a3;
 	color: #0b4a26;
 	border-color: #5df4a3;
 	transition: background 0.1s, border-color 0.1s;
 }
-.ve-pill-popover .components-button.is-primary:hover,
-.ve-pill-popover .components-button.is-primary:focus {
+.vectarr-pill-popover .components-button.is-primary:hover,
+.vectarr-pill-popover .components-button.is-primary:focus {
 	background: #4de695;
 	color: #0b4a26;
 	border-color: #4de695;
@@ -355,29 +355,29 @@
 /**
  * Autocomplete dropdown option — structural alignment.
  */
-.ve-autocompleter-option {
+.vectarr-autocompleter-option {
 	display: flex;
 	align-items: center;
 	width: 320px;
 }
 
 /* Override WordPress's aggressive blue highlight with our brand green */
-.components-autocomplete__results .components-autocomplete__option:has(.ve-autocompleter-option).is-active,
-.components-autocomplete__results .components-autocomplete__result:has(.ve-autocompleter-option).is-selected {
+.components-autocomplete__results .components-autocomplete__option:has(.vectarr-autocompleter-option).is-active,
+.components-autocomplete__results .components-autocomplete__result:has(.vectarr-autocompleter-option).is-selected {
     background-color: rgb(93, 244, 163) !important;
     color: black !important;
 }
-.components-autocomplete__results .components-autocomplete__option:has(.ve-autocompleter-option).is-active code,
-.components-autocomplete__results .components-autocomplete__option:has(.ve-autocompleter-option).is-active .ve-ac-icon svg path,
-.components-autocomplete__results .components-autocomplete__option:has(.ve-autocompleter-option).is-active .ve-ac-icon svg circle,
-.components-autocomplete__results .components-autocomplete__result:has(.ve-autocompleter-option).is-selected code,
-.components-autocomplete__results .components-autocomplete__result:has(.ve-autocompleter-option).is-selected .ve-ac-icon svg path,
-.components-autocomplete__results .components-autocomplete__result:has(.ve-autocompleter-option).is-selected .ve-ac-icon svg circle {
+.components-autocomplete__results .components-autocomplete__option:has(.vectarr-autocompleter-option).is-active code,
+.components-autocomplete__results .components-autocomplete__option:has(.vectarr-autocompleter-option).is-active .vectarr-ac-icon svg path,
+.components-autocomplete__results .components-autocomplete__option:has(.vectarr-autocompleter-option).is-active .vectarr-ac-icon svg circle,
+.components-autocomplete__results .components-autocomplete__result:has(.vectarr-autocompleter-option).is-selected code,
+.components-autocomplete__results .components-autocomplete__result:has(.vectarr-autocompleter-option).is-selected .vectarr-ac-icon svg path,
+.components-autocomplete__results .components-autocomplete__result:has(.vectarr-autocompleter-option).is-selected .vectarr-ac-icon svg circle {
     color: black!important;
 }
 
 /* Allow text truncation within the autocompleter flex row and expand the hover box */
-.components-autocomplete__results .components-button:has(.ve-autocompleter-option) {
+.components-autocomplete__results .components-button:has(.vectarr-autocompleter-option) {
 	width: 320px;
 	padding: 8px 12px;
 }
@@ -385,7 +385,7 @@
 /* ── Popover suggestion chips ─────────────────────────────────────────────── */
 
 /* Wrapping chip grid — max 3 rows before scrolling. */
-.ve-pill-suggestions {
+.vectarr-pill-suggestions {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
@@ -398,7 +398,7 @@
 }
 
 /* Base chip */
-.ve-pill-suggestion-btn {
+.vectarr-pill-suggestion-btn {
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
@@ -413,83 +413,83 @@
 	cursor: pointer;
 	transition: background 0.1s, border-color 0.1s;
 }
-.ve-pill-suggestion-btn:hover,
-.ve-pill-suggestion-btn:focus-visible {
+.vectarr-pill-suggestion-btn:hover,
+.vectarr-pill-suggestion-btn:focus-visible {
 	background: #eaf7f1;
 	border-color: #39b074;
 	outline: none;
 }
 
 /* Text label inside any chip */
-.ve-pill-suggestion-label {
+.vectarr-pill-suggestion-label {
 	font-size: 11.5px;
 	color: #1e1e1e;
 }
 
 /* Monospace expression shown inside non-root, non-pattern chips */
-.ve-pill-suggestion-expr {
+.vectarr-pill-suggestion-expr {
 	font-size: 10px;
 	opacity: 0.6;
 	font-family: monospace;
 }
 
 /* Root entry-point chip — slightly heavier with SVG icon */
-.ve-pill-suggestion-btn--root {
+.vectarr-pill-suggestion-btn--root {
 	padding: 4px 10px;
 	border-radius: 8px;
 	font-weight: 500;
 	border-color: #c3d9ce;
 	background: #f0faf5;
 }
-.ve-pill-suggestion-btn--root:hover {
+.vectarr-pill-suggestion-btn--root:hover {
 	background: #ddf5ea;
 	border-color: #39b074;
 }
 
 /* SVG icon in root chips — fix size and vertical alignment */
-.ve-pill-suggestion-icon {
+.vectarr-pill-suggestion-icon {
 	display: inline-flex;
 	align-items: center;
 	line-height: 0;
 }
-.ve-pill-suggestion-icon svg {
+.vectarr-pill-suggestion-icon svg {
 	width: 14px;
 	height: 14px;
 	vertical-align: middle;
 }
 
 /* Pattern chips — subtle pink/rose tint to distinguish from data chips */
-.ve-pill-suggestion-btn--pattern {
+.vectarr-pill-suggestion-btn--pattern {
 	background: #fdf2f8;
 	border-color: #f0c4e0;
 	color: #7a1548;
 }
-.ve-pill-suggestion-btn--pattern .ve-pill-suggestion-label {
+.vectarr-pill-suggestion-btn--pattern .vectarr-pill-suggestion-label {
 	color: #7a1548;
 }
-.ve-pill-suggestion-btn--pattern:hover {
+.vectarr-pill-suggestion-btn--pattern:hover {
 	background: #fce7f3;
 	border-color: #d946a8;
 	color: #6b1040;
 }
 
 /* Layout utility — replaces inline style spacer divs */
-.ve-spacer {
+.vectarr-spacer {
 	height: 5px;
 }
 
 /* ── Dynamic Class textarea ───────────────────────────────────────────────── */
 
-.ve-class-field {
+.vectarr-class-field {
 	margin-bottom: 0;
 }
 
-.ve-class-field .components-base-control__label {
+.vectarr-class-field .components-base-control__label {
 	display: block;
 	margin-bottom: 4px;
 }
 
-.ve-class-field .components-base-control__help {
+.vectarr-class-field .components-base-control__help {
 	margin-top: 6px;
 	font-size: 11px;
 	color: #757575;
@@ -500,7 +500,7 @@
  * "this is a template expression field", visually distinct from plain
  * text inputs while staying within the WP editor palette.
  */
-.ve-class-textarea {
+.vectarr-class-textarea {
 	display: block;
 	width: 100%;
 	min-height: 36px;
@@ -518,14 +518,14 @@
 	transition: border-color 0.1s, box-shadow 0.1s, background 0.1s;
 }
 
-.ve-class-textarea:focus {
+.vectarr-class-textarea:focus {
 	border-color: #007cba;
 	box-shadow: 0 0 0 1.5px #007cba;
 	outline: none;
 	background: #fff;
 }
 
-.ve-class-textarea::placeholder {
+.vectarr-class-textarea::placeholder {
 	color: #a0adb8;
 	font-style: italic;
 }
@@ -533,7 +533,7 @@
 /* ── Vector Sidebar ──────────────────────────────────────────────────────── */
 
 /* Empty state when no block is selected */
-.ve-sidebar-empty {
+.vectarr-sidebar-empty {
 	padding: 32px 16px;
 	color: #757575;
 	font-size: 13px;
@@ -541,7 +541,7 @@
 }
 
 /* Tab strip — icon-only, scrollable overflow */
-.ve-sidebar-tabs .components-tab-panel__tabs {
+.vectarr-sidebar-tabs .components-tab-panel__tabs {
 	display: flex;
 	border-bottom: 1px solid #e0e0e0;
 	margin: 0;
@@ -552,11 +552,11 @@
 	-ms-overflow-style: none;
 }
 
-.ve-sidebar-tabs .components-tab-panel__tabs::-webkit-scrollbar {
+.vectarr-sidebar-tabs .components-tab-panel__tabs::-webkit-scrollbar {
 	display: none;
 }
 
-.ve-sidebar-tabs .components-tab-panel__tabs button {
+.vectarr-sidebar-tabs .components-tab-panel__tabs button {
 	flex: 0 0 auto;
 	display: flex;
 	align-items: center;
@@ -570,17 +570,17 @@
 	transition: color 0.15s, border-color 0.15s;
 }
 
-.ve-sidebar-tabs .components-tab-panel__tabs button:hover {
+.vectarr-sidebar-tabs .components-tab-panel__tabs button:hover {
 	color: #1e1e1e;
 }
 
-.ve-sidebar-tabs .components-tab-panel__tabs button.is-active {
+.vectarr-sidebar-tabs .components-tab-panel__tabs button.is-active {
 	color: #1e1e1e;
 	border-bottom-color: #5df4a3;
 }
 
 /* Tab icon wrapper */
-.ve-tab-icon {
+.vectarr-tab-icon {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -588,35 +588,35 @@
 }
 
 /* Tab content panel — consistent padding */
-.ve-sidebar-tab-content {
+.vectarr-sidebar-tab-content {
 	padding: 16px;
 }
 
 /* ── Accordion Suggestions ──────────────────────────────────────────────────── */
 
-.ve-suggestions {
+.vectarr-suggestions {
 	margin-top: 16px;
 }
 
-.ve-suggestions-search {
+.vectarr-suggestions-search {
 	margin-bottom: 8px;
 }
 
-.ve-suggestions-search input {
+.vectarr-suggestions-search input {
 	width: 100%;
 	font-size: 12px;
 	padding: 6px 8px;
 }
 
-.ve-suggestions-group {
+.vectarr-suggestions-group {
 	border-top: 1px solid #e0e0e0;
 }
 
-.ve-suggestions-group:last-child {
+.vectarr-suggestions-group:last-child {
 	border-bottom: 1px solid #e0e0e0;
 }
 
-.ve-suggestions-header {
+.vectarr-suggestions-header {
 	display: flex;
 	align-items: center;
 	width: 100%;
@@ -632,15 +632,15 @@
 	gap: 6px;
 }
 
-.ve-suggestions-header:hover {
+.vectarr-suggestions-header:hover {
 	color: #1e1e1e;
 }
 
-.ve-suggestions-header.is-open {
+.vectarr-suggestions-header.is-open {
 	color: #1e1e1e;
 }
 
-.ve-suggestions-count {
+.vectarr-suggestions-count {
 	font-size: 10px;
 	font-weight: 400;
 	color: #949494;
@@ -651,13 +651,13 @@
 	text-align: center;
 }
 
-.ve-suggestions-arrow {
+.vectarr-suggestions-arrow {
 	margin-left: auto;
 	font-size: 8px;
 	color: #949494;
 }
 
-.ve-suggestions-items {
+.vectarr-suggestions-items {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
@@ -666,7 +666,7 @@
 	overflow-y: auto;
 }
 
-.ve-suggestion-chip.components-button {
+.vectarr-suggestion-chip.components-button {
 	font-size: 12px;
 	padding: 4px 8px;
 	height: auto;

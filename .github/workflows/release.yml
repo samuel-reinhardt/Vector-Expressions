@@ -30,8 +30,9 @@ jobs:
         run: |
           SLUG="${{ steps.slug.outputs.slug }}"
           mkdir -p "/tmp/${SLUG}"
-          # Copy everything except .git and .github into the named folder.
-          rsync -a --exclude='.git' --exclude='.github' ./ "/tmp/${SLUG}/"
+          # Copy everything except .git, .github, assets (WP.org directory images),
+          # scripts (dev build tooling), and node_modules into the named folder.
+          rsync -a --exclude='.git' --exclude='.github' --exclude='assets' --exclude='scripts' --exclude='node_modules' ./ "/tmp/${SLUG}/"
           cd /tmp && zip -r "${SLUG}.zip" "${SLUG}"
           echo "path=/tmp/${SLUG}.zip" >> "$GITHUB_OUTPUT"
 

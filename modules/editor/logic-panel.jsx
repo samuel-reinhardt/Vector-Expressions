@@ -9,7 +9,7 @@
  *   Pass 2 — Async:
  *      The hook parses the raw block HTML to find un-evaluated `<span>` pills
  *      and issues a batch REST API request to evaluate them. It injects the
- *      resolved text into each span's `data-ve-view` attribute.
+ *      resolved text into each span's `data-vectarr-view` attribute.
  */
 
 import { getCompletions, SKIP_CONVERT_BLOCKS, TOKEN_REGEX } from './constants.js';
@@ -45,7 +45,7 @@ const getRichTextAttrName = ( blockName ) => {
 
 /**
  * Parses `{{ expression }}` logic in the Raw text mode and converts them into
- * `<span class="ve-expr-token">` pills, skipping already-converted spans
+ * `<span class="vectarr-expr-token">` pills, skipping already-converted spans
  * and speculative spans.
  *
  * @param {string} html Raw attribute HTML.
@@ -74,10 +74,10 @@ const convertTokens = ( html, postId = 0 ) => {
 			if ( cached !== undefined ) {
 				const safeView = cached.replace( /"/g, '&quot;' );
 				const isEmpty  = ! cached.trim().replace( /\u00a0/g, '' );
-				viewAttrs = ` data-ve-view="${ safeView }"${ isEmpty ? ' data-ve-empty=""' : '' }`;
+				viewAttrs = ` data-vectarr-view="${ safeView }"${ isEmpty ? ' data-ve-empty=""' : '' }`;
 			}
 
-			return `<span class="ve-expr-token" data-ve-expr="${ safeExpr }"${ viewAttrs } contenteditable="false">{{ ${ e } }}</span>`;
+			return `<span class="vectarr-expr-token" data-vectarr-expr="${ safeExpr }"${ viewAttrs } contenteditable="false">{{ ${ e } }}</span>`;
 		},
 	);
 };
@@ -124,15 +124,15 @@ const usePass1Conversion = ( setAttributes, attrName, blockName, postId ) =>
 const ClassTextarea = ( { value, onChange, placeholder } ) => {
 	const { __ } = window.wp.i18n;
 	return (
-		<div className="ve-class-field">
+		<div className="vectarr-class-field">
 			<label
 				className="components-base-control__label"
-				htmlFor="ve-class-input"
+				htmlFor="vectarr-class-input"
 			>
 				{ __( 'Template', 'vector-expressions' ) }
 			</label>
 			<AutoTextarea
-				id="ve-class-input"
+				id="vectarr-class-input"
 				value={ value }
 				onChange={ onChange }
 				placeholder={ placeholder }
@@ -150,24 +150,24 @@ const ClassTextarea = ( { value, onChange, placeholder } ) => {
  * Pure render component for the "Vector Logic" inspector panel.
  *
  * @param {{
- *   ve_logic:    object|undefined,
+ *   vectarr_logic:    object|undefined,
  *   update:      (key: string, value: *) => void,
  *   showRef:     boolean,
  *   setShowRef:  Function,
  * }} props
  */
-const LogicSidebarContent = ( { ve_logic, update, blockName } ) => {
+const LogicSidebarContent = ( { vectarr_logic, update, blockName } ) => {
 	const [ showRef, setShowRef ] = useState( false );
 
 	return (
 		<Fragment>
 			{ /* ── Visibility ───────────────────────────────── */ }
-			<div className="ve-section">
-				<p className="ve-section-label">{ __( 'Visibility', 'vector-expressions' ) }</p>
+			<div className="vectarr-section">
+				<p className="vectarr-section-label">{ __( 'Visibility', 'vector-expressions' ) }</p>
 
 				<SelectControl
 					label={ __( 'Action', 'vector-expressions' ) }
-					value={ ve_logic?.visible_action || 'show' }
+					value={ vectarr_logic?.visible_action || 'show' }
 					options={ [
 						{ label: __( 'Show if True', 'vector-expressions' ), value: 'show' },
 						{ label: __( 'Hide if True', 'vector-expressions' ), value: 'hide' },
@@ -176,48 +176,48 @@ const LogicSidebarContent = ( { ve_logic, update, blockName } ) => {
 					__nextHasNoMarginBottom
 				/>
 
-				<div className="ve-class-field ve-condition-field">
+				<div className="vectarr-class-field vectarr-condition-field">
 					<label
 						className="components-base-control__label"
-						htmlFor="ve-condition-input"
+						htmlFor="vectarr-condition-input"
 					>
 						{ __( 'Condition', 'vector-expressions' ) }
 					</label>
-					<div className="ve-expr-field">
-						<span className="ve-expr-brace" aria-hidden="true">{'{{ '}</span>
+					<div className="vectarr-expr-field">
+						<span className="vectarr-expr-brace" aria-hidden="true">{'{{ '}</span>
 						<AutoTextarea
-							id="ve-condition-input"
-							value={ ve_logic?.visible || '' }
+							id="vectarr-condition-input"
+							value={ vectarr_logic?.visible || '' }
 							onChange={ ( v ) => update( 'visible', v ) }
 							placeholder="user.is_logged_in"
-							className="ve-class-textarea"
+							className="vectarr-class-textarea"
 						/>
-						<span className="ve-expr-brace" aria-hidden="true">{' }}'}</span>
+						<span className="vectarr-expr-brace" aria-hidden="true">{' }}'}</span>
 					</div>
 				</div>
 
 				{ /* Syntax Reference – right below the field it helps with */ }
-				<div className="ve-syntax-ref-wrap">
+				<div className="vectarr-syntax-ref-wrap">
 					<Button
 						variant="link"
 						size="small"
-						className="ve-syntax-ref-toggle"
+						className="vectarr-syntax-ref-toggle"
 						onClick={ () => setShowRef( ! showRef ) }
 						aria-expanded={ showRef }
 					>
 						{ __( 'Syntax reference', 'vector-expressions' ) }{ ' ' }{ showRef ? '▲' : '▼' }
 					</Button>
 					{ showRef && (
-						<table className="ve-syntax-ref">
+						<table className="vectarr-syntax-ref">
 							<tbody>
-								<tr className="ve-ref-head"><th colSpan="2">{ __( 'Variables', 'vector-expressions' ) }</th></tr>
+								<tr className="vectarr-ref-head"><th colSpan="2">{ __( 'Variables', 'vector-expressions' ) }</th></tr>
 								<tr><td><code>{ 'user.name' }</code></td><td>{ __( 'Display name', 'vector-expressions' ) }</td></tr>
 								<tr><td><code>{ 'user.is_logged_in' }</code></td><td>{ __( 'Logged in?', 'vector-expressions' ) }</td></tr>
 								<tr><td><code>{ 'user.role' }</code></td><td>{ __( 'User role', 'vector-expressions' ) }</td></tr>
 								<tr><td><code>{ 'post.title' }</code></td><td>{ __( 'Post title', 'vector-expressions' ) }</td></tr>
 								<tr><td><code>{ 'post.author_name' }</code></td><td>{ __( 'Author name', 'vector-expressions' ) }</td></tr>
 								<tr><td><code>{ 'post.meta.my_key' }</code></td><td>{ __( 'Post meta', 'vector-expressions' ) }</td></tr>
-								<tr className="ve-ref-head"><th colSpan="2">{ __( 'Operators & Filters', 'vector-expressions' ) }</th></tr>
+								<tr className="vectarr-ref-head"><th colSpan="2">{ __( 'Operators & Filters', 'vector-expressions' ) }</th></tr>
 								<tr><td><code>{ 'a == b' }</code></td><td>{ __( 'Equals', 'vector-expressions' ) }</td></tr>
 								<tr><td><code>{ 'a ? b : c' }</code></td><td>{ __( 'Ternary', 'vector-expressions' ) }</td></tr>
 								<tr><td><code>{ 'val | upper' }</code></td><td>{ __( 'Filter', 'vector-expressions' ) }</td></tr>
@@ -230,11 +230,11 @@ const LogicSidebarContent = ( { ve_logic, update, blockName } ) => {
 			</div>
 
 			{ /* ── Dynamic Class ────────────────────────────── */ }
-			<div className="ve-section ve-section--bordered">
-				<p className="ve-section-label">{ __( 'Dynamic Class', 'vector-expressions' ) }</p>
+			<div className="vectarr-section vectarr-section--bordered">
+				<p className="vectarr-section-label">{ __( 'Dynamic Class', 'vector-expressions' ) }</p>
 
 				<ClassTextarea
-					value={ ve_logic?.class || '' }
+					value={ vectarr_logic?.class || '' }
 					onChange={ ( v ) => update( 'class', v ) }
 					placeholder={ `prefix-{{ user.role | kebab }}` }
 				/>
@@ -254,7 +254,7 @@ const LogicSidebarContent = ( { ve_logic, update, blockName } ) => {
 const LogicPanel = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
 		const { attributes, setAttributes, name, context, clientId } = props;
-		const { ve_logic }  = attributes;
+		const { vectarr_logic }  = attributes;
 
 		const attrName  = useMemo( () => getRichTextAttrName( name ), [ name ] );
 		const postId    = context?.postId || select( 'core/editor' )?.getCurrentPostId?.() || 0;
@@ -282,12 +282,12 @@ export const registerLogicPanel = () => {
 	addFilter(
 		'vectorExpressions.sidebar.tab.logic',
 		've.sidebar-logic',
-		( content, ve_logic, update, blockName ) => {
+		( content, vectarr_logic, update, blockName ) => {
 			return (
 				<Fragment>
 					{ content }
 					<LogicSidebarContent
-						ve_logic={ ve_logic }
+						vectarr_logic={ vectarr_logic }
 						update={ update }
 						blockName={ blockName }
 					/>
@@ -298,7 +298,7 @@ export const registerLogicPanel = () => {
 	const REQUIRED_CONTEXT = [ 'postId', 'postType' ];
 
 	// Intercept future block registrations.
-	addFilter( 'blocks.registerBlockType', 've-logic.inject-context', ( settings, name ) => {
+	addFilter( 'blocks.registerBlockType', 'vectarr-logic.inject-context', ( settings, name ) => {
 		if ( SKIP_CONVERT_BLOCKS.has( name ) ) return settings;
 		const existing = settings.usesContext || [];
 		const missing  = REQUIRED_CONTEXT.filter( ( c ) => ! existing.includes( c ) );

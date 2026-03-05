@@ -26,7 +26,7 @@ export const AutoTextarea = ( {
 	value,
 	onChange,
 	placeholder = '',
-	className   = 've-class-textarea',
+	className   = 'vectarr-class-textarea',
 	id,
 	onKeyDown,
 	inputRef: externalRef,

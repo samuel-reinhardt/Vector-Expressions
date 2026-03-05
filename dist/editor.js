@@ -16,7 +16,7 @@
 
   // modules/editor/hydrator.js
   var { select } = window.wp.data;
-  var SPAN_TAG_RE = /<span\b([^>]*\bdata-ve-expr="([^"]*)"[^>]*)>/gi;
+  var SPAN_TAG_RE = /<span\b([^>]*\bdata-vectarr-expr="([^"]*)"[^>]*)>/gi;
   var resolveFromStore = (expr, postId, postType, editorPostId) => {
     const fail = { value: "", resolved: false };
     const parts = expr.trim().split(".");
@@ -150,7 +150,7 @@
       if (!attrName) return;
       const raw = attributes[attrName];
       const html = typeof raw === "string" ? raw : String(raw != null ? raw : "");
-      if (!html.includes("ve-expr-token")) return;
+      if (!html.includes("vectarr-expr-token")) return;
       const editorPostId = ((_b2 = (_a2 = select("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
       const isQueryChild = postId !== editorPostId;
       if (!isQueryChild && html === lastWritten.current) return;
@@ -159,7 +159,7 @@
       html.replace(SPAN_TAG_RE, (_match, tagInner, rawExpr) => {
         var _a3;
         if (!rawExpr) return;
-        const existingView = (_a3 = tagInner.match(/\bdata-ve-view="([^"]*)"/)) == null ? void 0 : _a3[1];
+        const existingView = (_a3 = tagInner.match(/\bdata-vectarr-view="([^"]*)"/)) == null ? void 0 : _a3[1];
         if (existingView && !isQueryChild) return;
         const expr = decodeAttr(rawExpr);
         const key = cacheKey(expr, postId);
@@ -223,7 +223,7 @@
     const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, rawExpr) => {
       var _a2;
       if (!rawExpr) return fullMatch;
-      const existingView = (_a2 = tagInner.match(/\bdata-ve-view="([^"]*)"/)) == null ? void 0 : _a2[1];
+      const existingView = (_a2 = tagInner.match(/\bdata-vectarr-view="([^"]*)"/)) == null ? void 0 : _a2[1];
       if (existingView) return fullMatch;
       const expr = decodeAttr(rawExpr);
       const view = viewCache.get(cacheKey(expr, postId));
@@ -231,10 +231,10 @@
       const cleaned = cleanPreview(view);
       const safeView = cleaned.replace(/"/g, "&quot;");
       const isEmpty = !cleaned.trim().replace(/\u00a0/g, "");
-      const emptyAttr = isEmpty ? ' data-ve-empty=""' : "";
+      const emptyAttr = isEmpty ? ' data-vectarr-empty=""' : "";
       return fullMatch.replace(
         tagInner,
-        tagInner + ` data-ve-view="${safeView}"${emptyAttr}`
+        tagInner + ` data-vectarr-view="${safeView}"${emptyAttr}`
       );
     });
     if (updated !== html) {
@@ -247,19 +247,19 @@
     if (!root) return;
     const postWrapper = root.querySelector(`.post-${postId}`);
     const scope = postWrapper || root.querySelector(`[data-block="${clientId}"]`) || root;
-    const spans = scope.querySelectorAll("span.ve-expr-token");
+    const spans = scope.querySelectorAll("span.vectarr-expr-token");
     spans.forEach((span) => {
-      const expr = span.getAttribute("data-ve-expr");
+      const expr = span.getAttribute("data-vectarr-expr");
       if (!expr) return;
       const view = viewCache.get(cacheKey(expr, postId));
       if (view === void 0) return;
       const cleaned = cleanPreview(view);
-      span.setAttribute("data-ve-view", cleaned);
+      span.setAttribute("data-vectarr-view", cleaned);
       const isEmpty = !cleaned.trim().replace(/\u00a0/g, "");
       if (isEmpty) {
-        span.setAttribute("data-ve-empty", "");
+        span.setAttribute("data-vectarr-empty", "");
       } else {
-        span.removeAttribute("data-ve-empty");
+        span.removeAttribute("data-vectarr-empty");
       }
     });
   };
@@ -271,7 +271,7 @@
   };
 
   // modules/editor/constants.js
-  var ctx = window.veContext || {};
+  var ctx = window.vectarrContext || {};
   var ICON_POST = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <path d="M4 2h9l4 4v13a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zm9 0v4h4" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/>
   <path stroke="white" d="M6 9h8M6 12h8M6 15h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -638,7 +638,7 @@
     "core/shortcode",
     "core/verse"
   ]);
-  var TOKEN_REGEX = /(<span\b[^>]*\bclass="ve-expr-token"[^>]*>[\s\S]*?<\/span>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
+  var TOKEN_REGEX = /(<span\b[^>]*\bclass="vectarr-expr-token"[^>]*>[\s\S]*?<\/span>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
 
   // modules/editor/auto-textarea.jsx
   var {
@@ -650,7 +650,7 @@
     value,
     onChange,
     placeholder = "",
-    className = "ve-class-textarea",
+    className = "vectarr-class-textarea",
     id,
     onKeyDown,
     inputRef: externalRef
@@ -779,11 +779,11 @@
       const el2 = contentRef == null ? void 0 : contentRef.current;
       if (!el2) return;
       if (isActive) {
-        const span = el2.querySelector("span.ve-expr-token[data-rich-text-format-boundary]");
-        if (span) span.setAttribute("data-ve-active", "");
+        const span = el2.querySelector("span.vectarr-expr-token[data-rich-text-format-boundary]");
+        if (span) span.setAttribute("data-vectarr-active", "");
       } else if (!sidebarActive) {
-        el2.querySelectorAll("span.ve-expr-token").forEach((m) => {
-          m.removeAttribute("data-ve-active");
+        el2.querySelectorAll("span.vectarr-expr-token").forEach((m) => {
+          m.removeAttribute("data-vectarr-active");
           m.removeAttribute("data-rich-text-format-boundary");
         });
       }
@@ -792,7 +792,7 @@
   var getTokenSpan = (n, el2) => {
     let cur = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
     while (cur && cur !== el2) {
-      if (cur.tagName === "SPAN" && cur.classList.contains("ve-expr-token")) return cur;
+      if (cur.tagName === "SPAN" && cur.classList.contains("vectarr-expr-token")) return cur;
       cur = cur.parentElement;
     }
     return null;
@@ -944,7 +944,7 @@
       }
       onSelect(newValue);
     };
-    return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-suggestions" }, /* @__PURE__ */ wp.element.createElement("div", { className: "ve-suggestions-search" }, /* @__PURE__ */ wp.element.createElement(
+    return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions" }, /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions-search" }, /* @__PURE__ */ wp.element.createElement(
       "input",
       {
         type: "text",
@@ -957,23 +957,23 @@
       const filtered = filterItems(cat.items);
       if (searching && filtered.length === 0) return null;
       const isOpen = searching || !!open[cat.key];
-      return /* @__PURE__ */ wp.element.createElement("div", { key: cat.key, className: "ve-suggestions-group" }, /* @__PURE__ */ wp.element.createElement(
+      return /* @__PURE__ */ wp.element.createElement("div", { key: cat.key, className: "vectarr-suggestions-group" }, /* @__PURE__ */ wp.element.createElement(
         "button",
         {
-          className: "ve-suggestions-header" + (isOpen ? " is-open" : ""),
+          className: "vectarr-suggestions-header" + (isOpen ? " is-open" : ""),
           onClick: () => !searching && toggle(cat.key),
           "aria-expanded": isOpen
         },
         /* @__PURE__ */ wp.element.createElement("span", null, cat.label),
-        /* @__PURE__ */ wp.element.createElement("span", { className: "ve-suggestions-count" }, filtered.length),
-        !searching && /* @__PURE__ */ wp.element.createElement("span", { className: "ve-suggestions-arrow" }, isOpen ? "\u25B2" : "\u25BC")
-      ), isOpen && /* @__PURE__ */ wp.element.createElement("div", { className: "ve-suggestions-items" }, filtered.map((s) => /* @__PURE__ */ wp.element.createElement(
+        /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-suggestions-count" }, filtered.length),
+        !searching && /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-suggestions-arrow" }, isOpen ? "\u25B2" : "\u25BC")
+      ), isOpen && /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions-items" }, filtered.map((s) => /* @__PURE__ */ wp.element.createElement(
         Button,
         {
           key: s.expr + (s.label || ""),
           variant: "secondary",
           size: "small",
-          className: "ve-suggestion-chip",
+          className: "vectarr-suggestion-chip",
           onMouseDown: (e) => e.preventDefault(),
           onClick: () => handleSelect(s)
         },
@@ -1056,7 +1056,7 @@
     const dismiss = useCallback2(() => {
       storeDispatch.clearActiveToken();
       const el2 = contentRef == null ? void 0 : contentRef.current;
-      const span = el2 == null ? void 0 : el2.querySelector("span[data-ve-active]");
+      const span = el2 == null ? void 0 : el2.querySelector("span[data-vectarr-active]");
       if (el2 && span) {
         const iframeDoc = el2.ownerDocument;
         const range = iframeDoc.createRange();
@@ -1108,10 +1108,10 @@
     registerFormatType("vector/expression", {
       title: __("Dynamic Value", "vector-expressions"),
       tagName: "span",
-      className: "ve-expr-token",
+      className: "vectarr-expr-token",
       attributes: {
-        expr: "data-ve-expr",
-        view: "data-ve-view",
+        expr: "data-vectarr-expr",
+        view: "data-vectarr-view",
         contentEditable: "contenteditable"
       },
       __unstableInputRule(value) {
@@ -1186,13 +1186,13 @@
     return el(
       "div",
       {
-        className: "ve-autocompleter-option",
+        className: "vectarr-autocompleter-option",
         style: { padding: "0", width: "100%", flexWrap: "nowrap", gap: "8px" }
       },
       el(
         "span",
         {
-          className: "ve-ac-icon",
+          className: "vectarr-ac-icon",
           style: { display: "inline-flex", flexShrink: 0, color: "#757575" }
         },
         el(RawHTML, null, iconSvg)
@@ -1297,9 +1297,9 @@
         if (cached !== void 0) {
           const safeView = cached.replace(/"/g, "&quot;");
           const isEmpty = !cached.trim().replace(/\u00a0/g, "");
-          viewAttrs = ` data-ve-view="${safeView}"${isEmpty ? ' data-ve-empty=""' : ""}`;
+          viewAttrs = ` data-vectarr-view="${safeView}"${isEmpty ? ' data-ve-empty=""' : ""}`;
         }
-        return `<span class="ve-expr-token" data-ve-expr="${safeExpr}"${viewAttrs} contenteditable="false">{{ ${e} }}</span>`;
+        return `<span class="vectarr-expr-token" data-vectarr-expr="${safeExpr}"${viewAttrs} contenteditable="false">{{ ${e} }}</span>`;
       }
     );
   };
@@ -1319,30 +1319,30 @@
   );
   var ClassTextarea = ({ value, onChange, placeholder }) => {
     const { __: __4 } = window.wp.i18n;
-    return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-class-field" }, /* @__PURE__ */ wp.element.createElement(
+    return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-class-field" }, /* @__PURE__ */ wp.element.createElement(
       "label",
       {
         className: "components-base-control__label",
-        htmlFor: "ve-class-input"
+        htmlFor: "vectarr-class-input"
       },
       __4("Template", "vector-expressions")
     ), /* @__PURE__ */ wp.element.createElement(
       AutoTextarea,
       {
-        id: "ve-class-input",
+        id: "vectarr-class-input",
         value,
         onChange,
         placeholder
       }
     ), /* @__PURE__ */ wp.element.createElement("p", { className: "components-base-control__help" }, __4("Mix static text and", "vector-expressions"), " ", /* @__PURE__ */ wp.element.createElement("code", null, "{{ expressions }}"), " ", __4("freely. Each token is evaluated and the full string becomes the class.", "vector-expressions")));
   };
-  var LogicSidebarContent = ({ ve_logic, update, blockName }) => {
+  var LogicSidebarContent = ({ vectarr_logic, update, blockName }) => {
     const [showRef, setShowRef] = useState2(false);
-    return /* @__PURE__ */ wp.element.createElement(Fragment, null, /* @__PURE__ */ wp.element.createElement("div", { className: "ve-section" }, /* @__PURE__ */ wp.element.createElement("p", { className: "ve-section-label" }, __2("Visibility", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
+    return /* @__PURE__ */ wp.element.createElement(Fragment, null, /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-section" }, /* @__PURE__ */ wp.element.createElement("p", { className: "vectarr-section-label" }, __2("Visibility", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
       SelectControl,
       {
         label: __2("Action", "vector-expressions"),
-        value: (ve_logic == null ? void 0 : ve_logic.visible_action) || "show",
+        value: (vectarr_logic == null ? void 0 : vectarr_logic.visible_action) || "show",
         options: [
           { label: __2("Show if True", "vector-expressions"), value: "show" },
           { label: __2("Hide if True", "vector-expressions"), value: "hide" }
@@ -1350,38 +1350,38 @@
         onChange: (v) => update("visible_action", v),
         __nextHasNoMarginBottom: true
       }
-    ), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-class-field ve-condition-field" }, /* @__PURE__ */ wp.element.createElement(
+    ), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-class-field vectarr-condition-field" }, /* @__PURE__ */ wp.element.createElement(
       "label",
       {
         className: "components-base-control__label",
-        htmlFor: "ve-condition-input"
+        htmlFor: "vectarr-condition-input"
       },
       __2("Condition", "vector-expressions")
-    ), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-expr-field" }, /* @__PURE__ */ wp.element.createElement("span", { className: "ve-expr-brace", "aria-hidden": "true" }, "{{ "), /* @__PURE__ */ wp.element.createElement(
+    ), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-expr-field" }, /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-expr-brace", "aria-hidden": "true" }, "{{ "), /* @__PURE__ */ wp.element.createElement(
       AutoTextarea,
       {
-        id: "ve-condition-input",
-        value: (ve_logic == null ? void 0 : ve_logic.visible) || "",
+        id: "vectarr-condition-input",
+        value: (vectarr_logic == null ? void 0 : vectarr_logic.visible) || "",
         onChange: (v) => update("visible", v),
         placeholder: "user.is_logged_in",
-        className: "ve-class-textarea"
+        className: "vectarr-class-textarea"
       }
-    ), /* @__PURE__ */ wp.element.createElement("span", { className: "ve-expr-brace", "aria-hidden": "true" }, " }}"))), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-syntax-ref-wrap" }, /* @__PURE__ */ wp.element.createElement(
+    ), /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-expr-brace", "aria-hidden": "true" }, " }}"))), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-syntax-ref-wrap" }, /* @__PURE__ */ wp.element.createElement(
       Button2,
       {
         variant: "link",
         size: "small",
-        className: "ve-syntax-ref-toggle",
+        className: "vectarr-syntax-ref-toggle",
         onClick: () => setShowRef(!showRef),
         "aria-expanded": showRef
       },
       __2("Syntax reference", "vector-expressions"),
       " ",
       showRef ? "\u25B2" : "\u25BC"
-    ), showRef && /* @__PURE__ */ wp.element.createElement("table", { className: "ve-syntax-ref" }, /* @__PURE__ */ wp.element.createElement("tbody", null, /* @__PURE__ */ wp.element.createElement("tr", { className: "ve-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Variables", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Display name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.is_logged_in")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Logged in?", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.role")), /* @__PURE__ */ wp.element.createElement("td", null, __2("User role", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.title")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post title", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author_name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.meta.my_key")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post meta", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", { className: "ve-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Operators & Filters", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a == b")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Equals", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a ? b : c")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Ternary", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "val | upper")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Filter", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.date | date")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Format date", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author | get_user")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author object", "vector-expressions"))))))), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-section ve-section--bordered" }, /* @__PURE__ */ wp.element.createElement("p", { className: "ve-section-label" }, __2("Dynamic Class", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
+    ), showRef && /* @__PURE__ */ wp.element.createElement("table", { className: "vectarr-syntax-ref" }, /* @__PURE__ */ wp.element.createElement("tbody", null, /* @__PURE__ */ wp.element.createElement("tr", { className: "vectarr-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Variables", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Display name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.is_logged_in")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Logged in?", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "user.role")), /* @__PURE__ */ wp.element.createElement("td", null, __2("User role", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.title")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post title", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author_name")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author name", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.meta.my_key")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Post meta", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", { className: "vectarr-ref-head" }, /* @__PURE__ */ wp.element.createElement("th", { colSpan: "2" }, __2("Operators & Filters", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a == b")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Equals", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "a ? b : c")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Ternary", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "val | upper")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Filter", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.date | date")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Format date", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("tr", null, /* @__PURE__ */ wp.element.createElement("td", null, /* @__PURE__ */ wp.element.createElement("code", null, "post.author | get_user")), /* @__PURE__ */ wp.element.createElement("td", null, __2("Author object", "vector-expressions"))))))), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-section vectarr-section--bordered" }, /* @__PURE__ */ wp.element.createElement("p", { className: "vectarr-section-label" }, __2("Dynamic Class", "vector-expressions")), /* @__PURE__ */ wp.element.createElement(
       ClassTextarea,
       {
-        value: (ve_logic == null ? void 0 : ve_logic.class) || "",
+        value: (vectarr_logic == null ? void 0 : vectarr_logic.class) || "",
         onChange: (v) => update("class", v),
         placeholder: `prefix-{{ user.role | kebab }}`
       }
@@ -1391,7 +1391,7 @@
     return (props) => {
       var _a2, _b2, _c2, _d2;
       const { attributes, setAttributes, name, context, clientId } = props;
-      const { ve_logic } = attributes;
+      const { vectarr_logic } = attributes;
       const attrName = useMemo2(() => getRichTextAttrName(name), [name]);
       const postId = (context == null ? void 0 : context.postId) || ((_b2 = (_a2 = select3("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
       const postType = (context == null ? void 0 : context.postType) || ((_d2 = (_c2 = select3("core/editor")) == null ? void 0 : _c2.getCurrentPostType) == null ? void 0 : _d2.call(_c2)) || "post";
@@ -1406,11 +1406,11 @@
     addFilter2(
       "vectorExpressions.sidebar.tab.logic",
       "ve.sidebar-logic",
-      (content, ve_logic, update, blockName) => {
+      (content, vectarr_logic, update, blockName) => {
         return /* @__PURE__ */ wp.element.createElement(Fragment, null, content, /* @__PURE__ */ wp.element.createElement(
           LogicSidebarContent,
           {
-            ve_logic,
+            vectarr_logic,
             update,
             blockName
           }
@@ -1418,7 +1418,7 @@
       }
     );
     const REQUIRED_CONTEXT = ["postId", "postType"];
-    addFilter2("blocks.registerBlockType", "ve-logic.inject-context", (settings, name) => {
+    addFilter2("blocks.registerBlockType", "vectarr-logic.inject-context", (settings, name) => {
       if (SKIP_CONVERT_BLOCKS.has(name)) return settings;
       const existing = settings.usesContext || [];
       const missing = REQUIRED_CONTEXT.filter((c) => !existing.includes(c));
@@ -1455,7 +1455,7 @@
     },
     /* @__PURE__ */ wp.element.createElement("g", { style: { fill: "currentColor" } }, /* @__PURE__ */ wp.element.createElement("path", { d: "M -372.38427,54.856239 V 40.319598 q 5.39067,-0.242277 7.93459,-2.119927 2.60448,-1.877649 3.937,-5.875225 1.3931,-3.997576 1.3931,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09024,-4.4215615 3.45245,-7.0260429 2.42277,-2.6650507 7.02604,-4.3609921 4.66384,-1.695941 13.38582,-1.695941 h 3.21018 v 14.53664 q -6.48092,0 -8.47971,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48455,6.117502 -3.33131,10.963049 -2.11993,3.573591 -7.32889,6.965474 4.42156,2.543912 7.02604,6.480919 2.60448,3.876437 3.45245,9.872801 0.36342,2.604481 0.84797,16.959414 0.18171,5.269532 0.66627,6.541488 0.7874,1.877649 2.90732,2.846759 2.1805,0.969109 8.84313,0.969109 v 14.476072 h -3.21018 q -8.78255,0 -13.0224,-1.45366 -4.23986,-1.3931 -6.90491,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15081,-4.179284 -1.15081,-14.476071 0,-11.508173 -1.27196,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }), /* @__PURE__ */ wp.element.createElement("path", { d: "M -329.85728,54.856239 V 40.319598 q 5.39067,-0.242277 7.93458,-2.119927 2.60448,-1.877649 3.93701,-5.875225 1.39309,-3.997576 1.39309,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09025,-4.4215615 3.45245,-7.0260429 2.42278,-2.6650507 7.02605,-4.3609921 4.66383,-1.695941 13.38582,-1.695941 h 3.21017 v 14.53664 q -6.48092,0 -8.4797,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48456,6.117502 -3.33132,10.963049 -2.11992,3.573591 -7.32889,6.965474 4.42157,2.543912 7.02605,6.480919 2.60448,3.876437 3.45245,9.872801 0.36341,2.604481 0.84797,16.959414 0.18171,5.269532 0.66626,6.541488 0.7874,1.877649 2.90733,2.846759 2.1805,0.969109 8.84312,0.969109 v 14.476072 h -3.21017 q -8.78256,0 -13.02241,-1.45366 -4.23985,-1.3931 -6.9049,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15082,-4.179284 -1.15082,-14.476071 0,-11.508173 -1.27195,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }))
   );
-  var TabIcon = ({ label, children }) => /* @__PURE__ */ wp.element.createElement("span", { className: "ve-tab-icon", title: label, "aria-label": label }, children);
+  var TabIcon = ({ label, children }) => /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-tab-icon", title: label, "aria-label": label }, children);
   var ExpressionTabIcon = () => /* @__PURE__ */ wp.element.createElement(TabIcon, { label: __3("Expression", "vector-expressions") }, /* @__PURE__ */ wp.element.createElement("svg", { width: "20", height: "20", viewBox: "-376 -15 92 126", "aria-hidden": "true", focusable: "false" }, /* @__PURE__ */ wp.element.createElement("g", { style: { fill: "currentColor" } }, /* @__PURE__ */ wp.element.createElement("path", { d: "M -372.38427,54.856239 V 40.319598 q 5.39067,-0.242277 7.93459,-2.119927 2.60448,-1.877649 3.937,-5.875225 1.3931,-3.997576 1.3931,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09024,-4.4215615 3.45245,-7.0260429 2.42277,-2.6650507 7.02604,-4.3609921 4.66384,-1.695941 13.38582,-1.695941 h 3.21018 v 14.53664 q -6.48092,0 -8.47971,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48455,6.117502 -3.33131,10.963049 -2.11993,3.573591 -7.32889,6.965474 4.42156,2.543912 7.02604,6.480919 2.60448,3.876437 3.45245,9.872801 0.36342,2.604481 0.84797,16.959414 0.18171,5.269532 0.66627,6.541488 0.7874,1.877649 2.90732,2.846759 2.1805,0.969109 8.84313,0.969109 v 14.476072 h -3.21018 q -8.78255,0 -13.0224,-1.45366 -4.23986,-1.3931 -6.90491,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15081,-4.179284 -1.15081,-14.476071 0,-11.508173 -1.27196,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }), /* @__PURE__ */ wp.element.createElement("path", { d: "M -329.85728,54.856239 V 40.319598 q 5.39067,-0.242277 7.93458,-2.119927 2.60448,-1.877649 3.93701,-5.875225 1.39309,-3.997576 1.39309,-13.506962 0,-11.9927279 1.09025,-16.35372 1.09025,-4.4215615 3.45245,-7.0260429 2.42278,-2.6650507 7.02605,-4.3609921 4.66383,-1.695941 13.38582,-1.695941 h 3.21017 v 14.53664 q -6.48092,0 -8.4797,0.726832 -1.99879,0.6662627 -2.9679,2.2410654 -0.90854,1.5748027 -0.90854,5.8146566 0,7.631736 -0.72683,17.019983 -0.48456,6.117502 -3.33132,10.963049 -2.11992,3.573591 -7.32889,6.965474 4.42157,2.543912 7.02605,6.480919 2.60448,3.876437 3.45245,9.872801 0.36341,2.604481 0.84797,16.959414 0.18171,5.269532 0.66626,6.541488 0.7874,1.877649 2.90733,2.846759 2.1805,0.969109 8.84312,0.969109 v 14.476072 h -3.21017 q -8.78256,0 -13.02241,-1.45366 -4.23985,-1.3931 -6.9049,-4.17929 -2.66505,-2.725619 -3.87644,-6.965473 -1.15082,-4.179284 -1.15082,-14.476071 0,-11.508173 -1.27195,-15.505749 -1.21139,-4.058146 -3.87644,-6.056934 -2.60448,-1.998788 -8.11629,-2.301634 z" }))));
   var LogicTabIcon = () => /* @__PURE__ */ wp.element.createElement(TabIcon, { label: __3("Logic", "vector-expressions") }, /* @__PURE__ */ wp.element.createElement("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": "true", focusable: "false" }, /* @__PURE__ */ wp.element.createElement("path", { d: "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" })));
   var ExpressionTabContent = () => {
@@ -1475,10 +1475,10 @@
       (_a2 = refs2.applyRemove) == null ? void 0 : _a2.call(refs2);
       (_b2 = refs2.dismiss) == null ? void 0 : _b2.call(refs2);
     };
-    return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-expression-editor" }, /* @__PURE__ */ wp.element.createElement("div", { className: "ve-expr-editor-field" }, /* @__PURE__ */ wp.element.createElement("label", { className: "components-base-control__label" }, __3("Expression", "vector-expressions")), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-expr-field" }, /* @__PURE__ */ wp.element.createElement("span", { className: "ve-expr-brace", "aria-hidden": "true" }, "{{ "), /* @__PURE__ */ wp.element.createElement(
+    return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-expression-editor" }, /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-expr-editor-field" }, /* @__PURE__ */ wp.element.createElement("label", { className: "components-base-control__label" }, __3("Expression", "vector-expressions")), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-expr-field" }, /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-expr-brace", "aria-hidden": "true" }, "{{ "), /* @__PURE__ */ wp.element.createElement(
       AutoTextarea,
       {
-        className: "ve-expr-input ve-class-textarea",
+        className: "vectarr-expr-input vectarr-class-textarea",
         value: expr,
         onChange: updateExpr,
         placeholder: "user.is_logged_in",
@@ -1496,7 +1496,7 @@
           }
         }
       }
-    ), /* @__PURE__ */ wp.element.createElement("span", { className: "ve-expr-brace", "aria-hidden": "true" }, " }}"))), /* @__PURE__ */ wp.element.createElement("div", { className: "ve-live-preview", style: {
+    ), /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-expr-brace", "aria-hidden": "true" }, " }}"))), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-live-preview", style: {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
@@ -1538,7 +1538,7 @@
     )));
   };
   var DEFAULT_TABS = [
-    { name: "logic", title: /* @__PURE__ */ wp.element.createElement(LogicTabIcon, null), className: "ve-sidebar-tab" }
+    { name: "logic", title: /* @__PURE__ */ wp.element.createElement(LogicTabIcon, null), className: "vectarr-sidebar-tab" }
   ];
   var VectorSidebarPanel = () => {
     var _a2;
@@ -1557,29 +1557,29 @@
       const exprTab = {
         name: "expression",
         title: /* @__PURE__ */ wp.element.createElement(ExpressionTabIcon, null),
-        className: "ve-sidebar-tab ve-sidebar-tab--expr"
+        className: "vectarr-sidebar-tab vectarr-sidebar-tab--expr"
       };
       return [exprTab, ...baseTabs];
     }, [isTokenActive, baseTabs]);
     if (!selectedBlock) {
-      return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-sidebar-empty" }, /* @__PURE__ */ wp.element.createElement("p", null, __3("Select a block to edit its Vector settings.", "vector-expressions")));
+      return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-sidebar-empty" }, /* @__PURE__ */ wp.element.createElement("p", null, __3("Select a block to edit its Vector settings.", "vector-expressions")));
     }
     const { clientId, attributes } = selectedBlock;
-    const ve_logic = attributes == null ? void 0 : attributes.ve_logic;
+    const vectarr_logic = attributes == null ? void 0 : attributes.vectarr_logic;
     const update = (key, val) => {
       updateBlockAttributes(clientId, {
-        ve_logic: { ...ve_logic != null ? ve_logic : {}, [key]: val }
+        vectarr_logic: { ...vectarr_logic != null ? vectarr_logic : {}, [key]: val }
       });
     };
     if (tabs.length <= 1) {
       const tabName = ((_a2 = tabs[0]) == null ? void 0 : _a2.name) || "logic";
       if (tabName === "expression") {
-        return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-sidebar-tab-content" }, /* @__PURE__ */ wp.element.createElement(ExpressionTabContent, null));
+        return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-sidebar-tab-content" }, /* @__PURE__ */ wp.element.createElement(ExpressionTabContent, null));
       }
-      return /* @__PURE__ */ wp.element.createElement("div", { className: "ve-sidebar-tab-content" }, applyFilters(
+      return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-sidebar-tab-content" }, applyFilters(
         `vectorExpressions.sidebar.tab.${tabName}`,
         null,
-        ve_logic,
+        vectarr_logic,
         update,
         blockName
       ));
@@ -1589,14 +1589,14 @@
       TabPanel,
       {
         key: isTokenActive ? "with-expr" : "without-expr",
-        className: "ve-sidebar-tabs",
+        className: "vectarr-sidebar-tabs",
         tabs,
         initialTabName: initialTab
       },
-      (tab) => /* @__PURE__ */ wp.element.createElement("div", { className: "ve-sidebar-tab-content" }, tab.name === "expression" ? /* @__PURE__ */ wp.element.createElement(ExpressionTabContent, null) : applyFilters(
+      (tab) => /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-sidebar-tab-content" }, tab.name === "expression" ? /* @__PURE__ */ wp.element.createElement(ExpressionTabContent, null) : applyFilters(
         `vectorExpressions.sidebar.tab.${tab.name}`,
         null,
-        ve_logic,
+        vectarr_logic,
         update,
         blockName
       ))
@@ -1617,7 +1617,7 @@
           name: SIDEBAR_NAME,
           title: __3("Vector Expressions", "vector-expressions"),
           icon: /* @__PURE__ */ wp.element.createElement(SidebarIcon, null),
-          className: "ve-sidebar"
+          className: "vectarr-sidebar"
         },
         /* @__PURE__ */ wp.element.createElement(VectorSidebarPanel, null)
       ))

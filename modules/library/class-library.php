@@ -359,15 +359,21 @@ class Library {
 	/**
 	 * Hydrate a user ID into a WP_User object.
 	 *
-	 * Useful for comparing post authors, retrieving meta, or passing into
-	 * expressions that need a full user context rather than a bare integer.
+	 * Requires the `list_users` capability to resolve arbitrary user IDs,
+	 * mirroring the WP REST API's `/wp/v2/users` permission model. This
+	 * prevents Contributors/Authors from using expressions like
+	 * `{{ 1 | get_user | prop 'email' }}` to enumerate other users' data.
 	 *
 	 * Usage: {{ post.author | get_user }} (truthy when author exists)
 	 *
 	 * @param mixed $in A numeric user ID.
-	 * @return \WP_User|null The resolved user, or null if not found.
+	 * @return \WP_User|null The resolved user, or null if not found/unauthorized.
 	 */
 	private function filter_get_user( mixed $in ): ?\WP_User {
+		if ( ! current_user_can( 'list_users' ) ) {
+			return null;
+		}
+
 		$id   = is_numeric( $in ) ? (int) $in : 0;
 		$user = $id ? get_userdata( $id ) : false;
 		return $user instanceof \WP_User ? $user : null;
@@ -376,12 +382,22 @@ class Library {
 	/**
 	 * Resolve a post ID to a WP_Post object.
 	 *
+	 * Returns null if the current user lacks `read_post` capability for the
+	 * resolved post, preventing Contributor-level users from brute-forcing
+	 * IDs to access Private or Draft posts they do not own.
+	 *
 	 * @param mixed $in A numeric post ID.
 	 * @return \WP_Post|null The resolved post or null.
 	 */
 	private function filter_get_post( mixed $in ): ?\WP_Post {
-		$id = is_numeric( $in ) ? (int) $in : null;
-		return $id ? get_post( $id ) : null;
+		$id   = is_numeric( $in ) ? (int) $in : null;
+		$post = $id ? get_post( $id ) : null;
+
+		if ( $post && ! current_user_can( 'read_post', $post->ID ) ) {
+			return null;
+		}
+
+		return $post;
 	}
 
 	/**

@@ -26,7 +26,7 @@ const { select, useSelect, useDispatch }        = window.wp.data;
 const { RichTextToolbarButton }                 = window.wp.blockEditor;
 
 /**
- * Mirrors `data-ve-active` on the active token span in sync with
+ * Mirrors `data-vectarr-active` on the active token span in sync with
  * Gutenberg's `isActive` prop.
  */
 const useActiveTokenState = ( isActive, contentRef, sidebarActive ) => {
@@ -35,11 +35,11 @@ const useActiveTokenState = ( isActive, contentRef, sidebarActive ) => {
 		if ( ! el ) return;
 
 		if ( isActive ) {
-			const span = el.querySelector( 'span.ve-expr-token[data-rich-text-format-boundary]' );
-			if ( span ) span.setAttribute( 'data-ve-active', '' );
+			const span = el.querySelector( 'span.vectarr-expr-token[data-rich-text-format-boundary]' );
+			if ( span ) span.setAttribute( 'data-vectarr-active', '' );
 		} else if ( ! sidebarActive ) {
-			el.querySelectorAll( 'span.ve-expr-token' ).forEach( ( m ) => {
-				m.removeAttribute( 'data-ve-active' );
+			el.querySelectorAll( 'span.vectarr-expr-token' ).forEach( ( m ) => {
+				m.removeAttribute( 'data-vectarr-active' );
 				m.removeAttribute( 'data-rich-text-format-boundary' );
 			} );
 		}
@@ -47,12 +47,12 @@ const useActiveTokenState = ( isActive, contentRef, sidebarActive ) => {
 };
 
 /**
- * Walks up the DOM from `n` to find the nearest `span.ve-expr-token`, or null.
+ * Walks up the DOM from `n` to find the nearest `span.vectarr-expr-token`, or null.
  */
 const getTokenSpan = ( n, el ) => {
 	let cur = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
 	while ( cur && cur !== el ) {
-		if ( cur.tagName === 'SPAN' && cur.classList.contains( 've-expr-token' ) ) return cur;
+		if ( cur.tagName === 'SPAN' && cur.classList.contains( 'vectarr-expr-token' ) ) return cur;
 		cur = cur.parentElement;
 	}
 	return null;
@@ -275,8 +275,8 @@ export const ExpressionSuggestions = ( { expr, onSelect } ) => {
 	};
 
 	return (
-		<div className="ve-suggestions">
-			<div className="ve-suggestions-search">
+		<div className="vectarr-suggestions">
+			<div className="vectarr-suggestions-search">
 				<input
 					type="text"
 					className="components-text-control__input"
@@ -293,24 +293,24 @@ export const ExpressionSuggestions = ( { expr, onSelect } ) => {
 				const isOpen = searching || !! open[ cat.key ];
 
 				return (
-					<div key={ cat.key } className="ve-suggestions-group">
+					<div key={ cat.key } className="vectarr-suggestions-group">
 						<button
-							className={ 've-suggestions-header' + ( isOpen ? ' is-open' : '' ) }
+							className={ 'vectarr-suggestions-header' + ( isOpen ? ' is-open' : '' ) }
 							onClick={ () => ! searching && toggle( cat.key ) }
 							aria-expanded={ isOpen }
 						>
 							<span>{ cat.label }</span>
-							<span className="ve-suggestions-count">{ filtered.length }</span>
-							{ ! searching && <span className="ve-suggestions-arrow">{ isOpen ? '▲' : '▼' }</span> }
+							<span className="vectarr-suggestions-count">{ filtered.length }</span>
+							{ ! searching && <span className="vectarr-suggestions-arrow">{ isOpen ? '▲' : '▼' }</span> }
 						</button>
 						{ isOpen && (
-							<div className="ve-suggestions-items">
+							<div className="vectarr-suggestions-items">
 								{ filtered.map( ( s ) => (
 									<Button
 										key={ s.expr + ( s.label || '' ) }
 										variant="secondary"
 										size="small"
-										className="ve-suggestion-chip"
+										className="vectarr-suggestion-chip"
 										onMouseDown={ ( e ) => e.preventDefault() }
 										onClick={ () => handleSelect( s ) }
 									>
@@ -427,7 +427,7 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 	const dismiss = useCallback( () => {
 		storeDispatch.clearActiveToken();
 		const el   = contentRef?.current;
-		const span = el?.querySelector( 'span[data-ve-active]' );
+		const span = el?.querySelector( 'span[data-vectarr-active]' );
 		if ( el && span ) {
 			const iframeDoc = el.ownerDocument;
 			const range     = iframeDoc.createRange();
@@ -486,10 +486,10 @@ export const registerExpressionFormat = () => {
 	registerFormatType( 'vector/expression', {
 		title:     __( 'Dynamic Value', 'vector-expressions' ),
 		tagName:   'span',
-		className: 've-expr-token',
+		className: 'vectarr-expr-token',
 		attributes: {
-			expr:            'data-ve-expr',
-			view:            'data-ve-view',
+			expr:            'data-vectarr-expr',
+			view:            'data-vectarr-view',
 			contentEditable: 'contenteditable',
 		},
 
