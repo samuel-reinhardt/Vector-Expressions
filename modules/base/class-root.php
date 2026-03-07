@@ -53,7 +53,7 @@ abstract class Root {
 	/** CSS accent class name for the sub-category. */
 	protected ?string $accent = null;
 
-	/** Text domain for i18n. Override in Pro/third-party plugins. */
+	/** Text domain for i18n — override in subclass constructors. */
 	protected string $text_domain = 'vector-expressions';
 
 	/**
@@ -82,8 +82,8 @@ abstract class Root {
 	// ── Accessors (override for runtime logic) ──────────────────────────────
 
 	protected function id(): string { return $this->id; }
-	protected function label(): string { return __( $this->label, $this->text_domain ); }
-	protected function description(): string { return __( $this->description, $this->text_domain ); }
+	protected function label(): string { return $this->label; }
+	protected function description(): string { return $this->description; }
 	protected function group(): string { return $this->group; }
 	protected function icon(): string { return $this->icon; }
 	protected function accent(): ?string { return $this->accent; }

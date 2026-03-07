@@ -63,7 +63,7 @@ abstract class ModifierSet {
 	/** CSS accent class name. */
 	protected ?string $accent = null;
 
-	/** Text domain for i18n. Override in Pro/third-party plugins. */
+	/** Text domain for i18n — override in subclass constructors. */
 	protected string $text_domain = 'vector-expressions';
 
 	/**
@@ -101,7 +101,7 @@ abstract class ModifierSet {
 
 	// ── Accessors (override for runtime logic) ──────────────────────────────
 
-	protected function category(): string { return __( $this->category, $this->text_domain ); }
+	protected function category(): string { return $this->category; }
 	protected function group(): string { return $this->group; }
 	protected function accent(): ?string { return $this->accent; }
 	protected function modifiers(): array { return $this->modifiers; }

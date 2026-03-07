@@ -23,6 +23,12 @@ class UserRoot extends Root {
 	protected string $description = 'Logged-in user — name, email, role…';
 	protected string $group       = 'content';
 
+	public function __construct() {
+		$this->label       = __( 'User', 'vector-expressions' );
+		$this->description = __( 'Logged-in user — name, email, role…', 'vector-expressions' );
+		parent::__construct();
+	}
+
 	protected string $icon = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="10" cy="6" r="4" fill="currentColor"/><path d="M2 19c0-4.4 3.6-8 8-8s8 3.6 8 8" fill="currentColor"/></svg>';
 
 	protected array $properties = [
