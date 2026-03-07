@@ -8,7 +8,7 @@ License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Tags: block editor, gutenberg, logic, dynamic content, expressions
 
-A logic engine for the Gutenberg block editor. Embed dynamic expressions directly in block content to personalize output and control block visibility — no custom code required.
+Embed dynamic expressions in the Gutenberg block editor to personalize content and control block visibility.
 
 == Description ==
 

@@ -23,11 +23,8 @@ class SiteRoot extends Root {
 	protected string $description = 'Site-wide settings — name, URL, language…';
 	protected string $group       = 'content';
 
-	public function __construct() {
-		$this->label       = __( 'Site', 'vector-expressions' );
-		$this->description = __( 'Site-wide settings — name, URL, language…', 'vector-expressions' );
-		parent::__construct();
-	}
+	protected function label(): string { return __( 'Site', 'vector-expressions' ); }
+	protected function description(): string { return __( 'Site-wide settings — name, URL, language…', 'vector-expressions' ); }
 
 	protected string $icon = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.75"/><rect x="2" y="2" width="16" height="5" rx="2" fill="currentColor"/><circle cx="5" cy="4.5" r="1" fill="white"/><circle cx="8" cy="4.5" r="1" fill="white"/></svg>';
 

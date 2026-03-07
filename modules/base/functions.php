@@ -39,14 +39,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @var array<string, Root>
  */
-$GLOBALS['_vectex_registered_roots'] = [];
+$GLOBALS['vector_expressions_registered_roots'] = [];
 
 /**
  * Registry of dynamically registered modifiers keyed by name.
  *
  * @var array<string, Modifier>
  */
-$GLOBALS['_vectex_registered_modifiers'] = [];
+$GLOBALS['vector_expressions_registered_modifiers'] = [];
 
 /**
  * Register a custom expression root from a simple config array.
@@ -101,7 +101,7 @@ function vectex_register_root( string $id, array $config ): void {
 		}
 	};
 
-	$GLOBALS['_vectex_registered_roots'][ $id ] = $root;
+	$GLOBALS['vector_expressions_registered_roots'][ $id ] = $root;
 }
 
 /**
@@ -114,13 +114,13 @@ function vectex_register_root( string $id, array $config ): void {
  * @return void
  */
 function vectex_deregister_root( string $id ): void {
-	if ( isset( $GLOBALS['_vectex_registered_roots'][ $id ] ) ) {
-		$root = $GLOBALS['_vectex_registered_roots'][ $id ];
+	if ( isset( $GLOBALS['vector_expressions_registered_roots'][ $id ] ) ) {
+		$root = $GLOBALS['vector_expressions_registered_roots'][ $id ];
 		remove_filter( 'vector_expressions/context/get', [ $root, 'filter_resolve' ] );
 		remove_filter( 'vector_expressions/editor/roots', [ $root, 'register_definition' ] );
 		remove_filter( 'vector_expressions/editor/patterns', [ $root, 'register_patterns' ] );
 		remove_filter( 'vector_expressions/editor/quickstart', [ $root, 'register_quickstart' ] );
-		unset( $GLOBALS['_vectex_registered_roots'][ $id ] );
+		unset( $GLOBALS['vector_expressions_registered_roots'][ $id ] );
 		return;
 	}
 
@@ -167,7 +167,7 @@ function vectex_register_modifier( string $name, array $config ): void {
 		apply:    $config['apply'],
 	);
 
-	$GLOBALS['_vectex_registered_modifiers'][ $name ] = $modifier;
+	$GLOBALS['vector_expressions_registered_modifiers'][ $name ] = $modifier;
 }
 
 /**
@@ -177,8 +177,8 @@ function vectex_register_modifier( string $name, array $config ): void {
  * @return void
  */
 function vectex_deregister_modifier( string $name ): void {
-	if ( isset( $GLOBALS['_vectex_registered_modifiers'][ $name ] ) ) {
-		unset( $GLOBALS['_vectex_registered_modifiers'][ $name ] );
+	if ( isset( $GLOBALS['vector_expressions_registered_modifiers'][ $name ] ) ) {
+		unset( $GLOBALS['vector_expressions_registered_modifiers'][ $name ] );
 	}
 
 	// For class-based modifiers, suppress via filter.
