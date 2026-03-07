@@ -7,6 +7,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.2] - 2026-03-06
+
+### Added
+
+- `post.author_name` computed property — resolves author display name without exposing `wp_users` internals.
+- `date` filter for formatting date strings with custom PHP date formats.
+- Explicit pattern categories in the suggestion accordion — patterns can now declare their own category instead of being auto-distributed by root.
+
+### Changed
+
+- `user.email` and `user.login` are now gated behind `is_user_logged_in()` — available for logged-in visitors (dashboard personalization), `null` for anonymous visitors.
+- `get_user` modifier no longer requires `list_users` capability — the property allowlist is the security boundary.
+- Restyled expression editor action buttons for improved visual hierarchy.
+- Modifier architecture refactored into a base `Modifier` class and `ModifierSet` registry for cleaner extension patterns.
+- Third-party developers can now inject expression completions at runtime via the `vector_expressions/editor/completions` JavaScript filter.
+
+### Fixed
+
+- Removed direct user data hydration to prevent a race condition with `getCurrentUser()` and `useEffect` cleanup.
+- Modifier category matching updated to use `endsWith` with optional chaining for improved flexibility.
+- Documentation corrected: `post.url` now accurately documented as `get_permalink()` (was incorrectly listed as `guid`), syntax table for `{{{ }}}` clarified as `wp_kses_post()`.
+
+---
+
 ## [1.0.1] - 2026-03-01
 
 ### Added
@@ -87,11 +111,5 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - `render_block_logic`: `attrs` is now always initialized as an empty array and guarded with `is_array()` before iteration.
-
----
-
-## [1.0.0] and earlier
-
-> No structured changelog was maintained prior to 1.0.0.
 
 ---

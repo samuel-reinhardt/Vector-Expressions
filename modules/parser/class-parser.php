@@ -146,7 +146,11 @@ class Parser {
 				try {
 					$val = $this->evaluate( $expr );
 
-					// NEW: Allow Pro (like Client Hydration) to wrap the final rendered output.
+					// Allow Pro (like Client Hydration) to wrap the final rendered output.
+					// SECURITY: The returned value is subject to automatic escaping —
+					// non-SafeString values go through htmlspecialchars(), SafeString
+					// values go through wp_kses_post(). Extensions cannot bypass escaping
+					// through this filter.
 					$val = apply_filters( 'vector_expressions/parser/render_token', $val, $expr, $is_raw );
 
 					if ( is_object( $val ) && isset( $val->__ve_safe ) ) {

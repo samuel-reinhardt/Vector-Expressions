@@ -32,6 +32,86 @@ const SPAN_TAG_RE = /<span\b([^>]*\bdata-vectarr-expr="([^"]*)"[^>]*)>/gi;
 
 // ─── Client-side Expression Resolver ────────────────────────────────────────
 
+const config = window.vectarrEditorConfig || {};
+
+/**
+ * Build entity-field resolver maps from PHP-localized root data.
+ *
+ * For each root, maps `property key` → `entity field path`.
+ * Properties without an explicit `entity` use 1:1 mapping (key → key).
+ *
+ * @type {Record<string, Record<string, string>>}
+ */
+const entityMaps = {};
+for (const root of config.roots || []) {
+  const map = {};
+  for (const prop of root.properties || []) {
+    map[prop.key] = prop.entity || prop.key;
+  }
+  entityMaps[root.id] = map;
+}
+
+/**
+ * Build property type maps from PHP-localized root data.
+ * @type {Record<string, Record<string, string>>}
+ */
+const typeMaps = {};
+for (const root of config.roots || []) {
+  const map = {};
+  for (const prop of root.properties || []) {
+    if (prop.type) map[prop.key] = prop.type;
+  }
+  typeMaps[root.id] = map;
+}
+
+/**
+ * Special-case handlers for entity fields prefixed with `__`.
+ * These require custom logic beyond simple field traversal.
+ */
+const specialHandlers = {
+  /**
+   * Post author name — fetches a separate user entity by author ID.
+   */
+  __author_name: (_record, _prop, postId, postType) => {
+    const record = select("core").getEntityRecord("postType", postType, postId);
+    if (!record?.author) return "";
+    const user = select("core").getUser(record.author);
+    return user?.name ?? "";
+  },
+
+  /**
+   * User logged-in state — always true in the editor (you must be logged in).
+   */
+  __is_logged_in: () => "true",
+};
+
+/**
+ * Resolve a dotted entity field path from a record object.
+ * e.g., "title.raw" → record.title.raw
+ *
+ * For fields with a `.raw` suffix, falls back to `.rendered` if `.raw` is empty.
+ *
+ * @param {Object} record Entity record object.
+ * @param {string} entityField Dotted field path (e.g., "title.raw").
+ * @returns {string} Resolved value or empty string.
+ */
+const resolveField = (record, entityField) => {
+  const parts = entityField.split(".");
+  let val = record;
+  for (const p of parts) {
+    val = val?.[p];
+  }
+
+  // For `.raw` fields, try `.rendered` as fallback.
+  if (val == null && parts.length === 2 && parts[1] === "raw") {
+    val = record?.[parts[0]]?.rendered;
+  }
+
+  if (val == null) return "";
+  if (Array.isArray(val)) return val.join(", ");
+  return String(val);
+};
+
 /**
  * Attempt to resolve an expression purely from Gutenberg's entity store.
  *
@@ -52,96 +132,51 @@ const resolveFromStore = (expr, postId, postType, editorPostId) => {
   const [root, prop] = parts;
   if (expr.includes("|") || expr.includes("(")) return fail;
 
-  switch (root) {
-    case "post":
-      return resolvePost(prop, postId, postType, editorPostId);
-    case "site":
-      return resolveSite(prop);
-    // `user` is intentionally omitted — `getCurrentUser()` is a one-shot
-    // `select()` call inside useEffect (not a reactive `useSelect`), so it
-    // may return undefined on the first render. The inflight REST fetch
-    // then gets cancelled by cleanup when the entity store triggers a
-    // re-render. Delegating to `fetchPreview` avoids this race entirely.
-    default:
-      return fail;
+  // Must be a known root with an entity map.
+  const fieldMap = entityMaps[root];
+  if (!fieldMap) return fail;
+
+  const entityField = fieldMap[prop];
+  if (!entityField) return fail;
+
+  // Special-case handler (prefixed with `__`).
+  if (entityField.startsWith("__")) {
+    const handler = specialHandlers[entityField];
+    if (!handler) return fail;
+    return { value: handler(null, prop, postId, postType), resolved: true };
   }
-};
 
-/** Resolve a `post.*` expression from the entity store. */
-const resolvePost = (prop, postId, postType, editorPostId) => {
-  const fail = { value: "", resolved: false };
-  if (!postId || !postType) return fail;
-
-  const record = select("core").getEntityRecord("postType", postType, postId);
-  if (!record) return fail;
-
-  // Fractal protection: block content/excerpt only for the editor post.
-  if ((prop === "content" || prop === "excerpt") && postId === editorPostId) {
+  // Fractal protection: html-type fields only for the editor post.
+  const propType = typeMaps[root]?.[prop];
+  if (propType === "html" && postId === editorPostId) {
     return { value: "", resolved: true };
   }
 
-  const map = {
-    title: () => record.title?.rendered ?? record.title?.raw ?? "",
-    excerpt: () =>
-      stripHtml(record.excerpt?.rendered ?? record.excerpt?.raw ?? ""),
-    content: () =>
-      stripHtml(record.content?.rendered ?? record.content?.raw ?? ""),
-    date: () => (record.date ?? "").replace("T", " "),
-    status: () => record.status ?? "",
-    slug: () => record.slug ?? "",
-    id: () => String(record.id ?? ""),
-    type: () => record.type ?? "",
-    url: () => record.link ?? "",
-    author_name: () => {
-      const authorId = record.author;
-      if (!authorId) return "";
-      const user = select("core").getUser(authorId);
-      return user?.name ?? "";
-    },
-  };
+  // Resolve from entity store based on root type.
+  let record;
+  if (root === "site") {
+    record = select("core").getEntityRecord("root", "site");
+  } else if (root === "user") {
+    // `user` is intentionally skipped for store resolution — getCurrentUser()
+    // is a one-shot select() call that may return undefined on first render.
+    // Delegating to fetchPreview avoids the race condition.
+    return fail;
+  } else {
+    // Default: treat as a post-type entity.
+    if (!postId || !postType) return fail;
+    record = select("core").getEntityRecord("postType", postType, postId);
+  }
 
-  const getter = map[prop];
-  if (!getter) return fail;
-  return { value: getter(), resolved: true };
-};
+  if (!record) return fail;
 
-/** Resolve a `user.*` expression from the current user. */
-const resolveUser = (prop) => {
-  const fail = { value: "", resolved: false };
-  const user = select("core").getCurrentUser();
-  if (!user) return fail;
+  let value = resolveField(record, entityField);
 
-  const map = {
-    name: () => user.name ?? "",
-    email: () => user.email ?? "",
-    id: () => String(user.id ?? ""),
-    login: () => user.slug ?? user.username ?? "",
-    url: () => user.url ?? user.link ?? "",
-    is_logged_in: () => "true",
-    roles: () => (user.roles ?? []).join(", "),
-  };
+  // Date fields: strip the T separator for readability.
+  if (propType === "date" && value.includes("T")) {
+    value = value.replace("T", " ");
+  }
 
-  const getter = map[prop];
-  if (!getter) return fail;
-  return { value: getter(), resolved: true };
-};
-
-/** Resolve a `site.*` expression from the site entity. */
-const resolveSite = (prop) => {
-  const fail = { value: "", resolved: false };
-  const site = select("core").getEntityRecord("root", "site");
-  if (!site) return fail;
-
-  const map = {
-    name: () => site.title ?? "",
-    description: () => site.description ?? "",
-    url: () => site.url ?? "",
-    language: () => site.language ?? "",
-  };
-
-  const getter = map[prop];
-  if (!getter) return fail;
-  return { value: getter(), resolved: true };
+  return { value, resolved: true };
 };
 
 // ─── Utilities ──────────────────────────────────────────────────────────────

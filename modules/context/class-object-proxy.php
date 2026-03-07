@@ -89,6 +89,12 @@ class ObjectProxy {
 		/**
 		 * Filters the list of keyword substrings used to block sensitive meta keys.
 		 *
+		 * SECURITY: Removing keywords from this list weakens defense-in-depth
+		 * protection against accidental exposure of credentials, tokens, or
+		 * API keys stored in public (non-underscored) meta fields. Only add
+		 * to this list; do not remove entries unless you are certain no sensitive
+		 * data uses those substrings as meta key components.
+		 *
 		 * @param string[] $keywords List of lowercase substrings. A meta key containing
 		 *                           any of these substrings (case-insensitive) is blocked.
 		 */

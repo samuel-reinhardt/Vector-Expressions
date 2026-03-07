@@ -6,7 +6,7 @@ declare( strict_types=1 );
  * Plugin Name:       Vector Expressions
  * Plugin URI:        https://vectorarrow.com/products/vector-expressions/
  * Description:       Logic engine for Gutenberg. Personalize content and control block visibility.
- * Version:           1.0.1
+ * Version:           1.0.2
  * Author:            Vector Arrow LLC
  * Author URI:        https://vectorarrow.com
  * License:           GPL v2 or later
@@ -24,11 +24,36 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'VECTARR_VERSION', '1.0.1' );
+define( 'VECTARR_VERSION', '1.0.2' );
 define( 'VECTARR_PATH', plugin_dir_path( __FILE__ ) );
 define( 'VECTARR_URL', plugin_dir_url( __FILE__ ) );
 
+/**
+ * Return a cache-busting version string for an asset file.
+ *
+ * In development (WP_DEBUG), returns the file's modification timestamp
+ * so rebuilds are picked up immediately. In production, returns the
+ * plugin version constant for long-lived caching.
+ *
+ * @param string $path Absolute filesystem path to the asset file.
+ * @return string Version string.
+ */
+function vectarr_asset_version( string $path ): string {
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG && file_exists( $path ) ) {
+		return (string) filemtime( $path );
+	}
+	return VECTARR_VERSION;
+}
+
 // Autoload module class files.
+require_once VECTARR_PATH . 'modules/base/class-root.php';
+require_once VECTARR_PATH . 'modules/base/class-modifier.php';
+require_once VECTARR_PATH . 'modules/base/class-modifier-set.php';
+require_once VECTARR_PATH . 'modules/base/functions.php';
+require_once VECTARR_PATH . 'modules/base/class-post-root.php';
+require_once VECTARR_PATH . 'modules/base/class-user-root.php';
+require_once VECTARR_PATH . 'modules/base/class-site-root.php';
+require_once VECTARR_PATH . 'modules/base/class-core-modifiers.php';
 require_once VECTARR_PATH . 'modules/parser/class-safe-string.php';
 require_once VECTARR_PATH . 'modules/context/class-object-proxy.php';
 require_once VECTARR_PATH . 'modules/context/class-context.php';
@@ -68,6 +93,13 @@ final class VectorExpressions {
 	 */
 	private function __construct() {
 		$this->parser = new Parser();
+
+		// Instantiate core Root and ModifierSet subclasses so they
+		// self-register via hooks in their constructors.
+		new PostRoot();
+		new UserRoot();
+		new SiteRoot();
+		new CoreModifiers();
 
 		add_action( 'init',                        [ $this, 'register_attributes' ] );
 		add_filter( 'render_block',                [ $this, 'render_block_logic' ], 20, 2 );
@@ -599,7 +631,7 @@ final class VectorExpressions {
 			'vectarr-editor',
 			VECTARR_URL . 'dist/editor.js',
 			[ 'wp-blocks', 'wp-element', 'wp-components', 'wp-data', 'wp-i18n', 'wp-compose', 'wp-block-editor', 'wp-rich-text', 'wp-hooks', 'wp-plugins', 'wp-editor', 'wp-edit-post' ],
-			VECTARR_VERSION,
+			vectarr_asset_version( VECTARR_PATH . 'dist/editor.js' ),
 			true
 		);
 
@@ -652,6 +684,16 @@ final class VectorExpressions {
 		);
 
 		wp_localize_script( 'vectarr-editor', 'vectarrContext', $context );
+
+		// Localize root/modifier/pattern definitions from PHP.
+		// These are auto-populated by Root and ModifierSet subclass constructors.
+		wp_localize_script( 'vectarr-editor', 'vectarrEditorConfig', [
+			'roots'      => apply_filters( 'vector_expressions/editor/roots', [] ),
+			'modifiers'  => apply_filters( 'vector_expressions/editor/modifiers', [] ),
+			'patterns'   => apply_filters( 'vector_expressions/editor/patterns', [] ),
+			'quickstart' => apply_filters( 'vector_expressions/editor/quickstart', [] ),
+			'icons'      => Root::ui_icons(),
+		] );
 	}
 
 	/**
@@ -671,7 +713,7 @@ final class VectorExpressions {
 			'vectarr-editor-css',
 			VECTARR_URL . 'dist/editor.css',
 			[],
-			VECTARR_VERSION
+			vectarr_asset_version( VECTARR_PATH . 'dist/editor.css' )
 		);
 	}
 }

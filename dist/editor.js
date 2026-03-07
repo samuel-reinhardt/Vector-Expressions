@@ -17,114 +17,94 @@
   // modules/editor/hydrator.js
   var { select } = window.wp.data;
   var SPAN_TAG_RE = /<span\b([^>]*\bdata-vectarr-expr="([^"]*)"[^>]*)>/gi;
+  var config = window.vectarrEditorConfig || {};
+  var entityMaps = {};
+  for (const root of config.roots || []) {
+    const map = {};
+    for (const prop of root.properties || []) {
+      map[prop.key] = prop.entity || prop.key;
+    }
+    entityMaps[root.id] = map;
+  }
+  var typeMaps = {};
+  for (const root of config.roots || []) {
+    const map = {};
+    for (const prop of root.properties || []) {
+      if (prop.type) map[prop.key] = prop.type;
+    }
+    typeMaps[root.id] = map;
+  }
+  var specialHandlers = {
+    /**
+     * Post author name — fetches a separate user entity by author ID.
+     */
+    __author_name: (_record, _prop, postId, postType) => {
+      var _a;
+      const record = select("core").getEntityRecord("postType", postType, postId);
+      if (!(record == null ? void 0 : record.author)) return "";
+      const user = select("core").getUser(record.author);
+      return (_a = user == null ? void 0 : user.name) != null ? _a : "";
+    },
+    /**
+     * User logged-in state — always true in the editor (you must be logged in).
+     */
+    __is_logged_in: () => "true"
+  };
+  var resolveField = (record, entityField) => {
+    var _a;
+    const parts = entityField.split(".");
+    let val = record;
+    for (const p of parts) {
+      val = val == null ? void 0 : val[p];
+    }
+    if (val == null && parts.length === 2 && parts[1] === "raw") {
+      val = (_a = record == null ? void 0 : record[parts[0]]) == null ? void 0 : _a.rendered;
+    }
+    if (val == null) return "";
+    if (Array.isArray(val)) return val.join(", ");
+    return String(val);
+  };
   var resolveFromStore = (expr, postId, postType, editorPostId) => {
+    var _a;
     const fail = { value: "", resolved: false };
     const parts = expr.trim().split(".");
     if (parts.length !== 2) return fail;
     const [root, prop] = parts;
     if (expr.includes("|") || expr.includes("(")) return fail;
-    switch (root) {
-      case "post":
-        return resolvePost(prop, postId, postType, editorPostId);
-      case "site":
-        return resolveSite(prop);
-      // `user` is intentionally omitted — `getCurrentUser()` is a one-shot
-      // `select()` call inside useEffect (not a reactive `useSelect`), so it
-      // may return undefined on the first render. The inflight REST fetch
-      // then gets cancelled by cleanup when the entity store triggers a
-      // re-render. Delegating to `fetchPreview` avoids this race entirely.
-      default:
-        return fail;
+    const fieldMap = entityMaps[root];
+    if (!fieldMap) return fail;
+    const entityField = fieldMap[prop];
+    if (!entityField) return fail;
+    if (entityField.startsWith("__")) {
+      const handler = specialHandlers[entityField];
+      if (!handler) return fail;
+      return { value: handler(null, prop, postId, postType), resolved: true };
     }
-  };
-  var resolvePost = (prop, postId, postType, editorPostId) => {
-    const fail = { value: "", resolved: false };
-    if (!postId || !postType) return fail;
-    const record = select("core").getEntityRecord("postType", postType, postId);
-    if (!record) return fail;
-    if ((prop === "content" || prop === "excerpt") && postId === editorPostId) {
+    const propType = (_a = typeMaps[root]) == null ? void 0 : _a[prop];
+    if (propType === "html" && postId === editorPostId) {
       return { value: "", resolved: true };
     }
-    const map = {
-      title: () => {
-        var _a2, _b2, _c2, _d2;
-        return (_d2 = (_c2 = (_a2 = record.title) == null ? void 0 : _a2.rendered) != null ? _c2 : (_b2 = record.title) == null ? void 0 : _b2.raw) != null ? _d2 : "";
-      },
-      excerpt: () => {
-        var _a2, _b2, _c2, _d2;
-        return stripHtml((_d2 = (_c2 = (_a2 = record.excerpt) == null ? void 0 : _a2.rendered) != null ? _c2 : (_b2 = record.excerpt) == null ? void 0 : _b2.raw) != null ? _d2 : "");
-      },
-      content: () => {
-        var _a2, _b2, _c2, _d2;
-        return stripHtml((_d2 = (_c2 = (_a2 = record.content) == null ? void 0 : _a2.rendered) != null ? _c2 : (_b2 = record.content) == null ? void 0 : _b2.raw) != null ? _d2 : "");
-      },
-      date: () => {
-        var _a2;
-        return ((_a2 = record.date) != null ? _a2 : "").replace("T", " ");
-      },
-      status: () => {
-        var _a2;
-        return (_a2 = record.status) != null ? _a2 : "";
-      },
-      slug: () => {
-        var _a2;
-        return (_a2 = record.slug) != null ? _a2 : "";
-      },
-      id: () => {
-        var _a2;
-        return String((_a2 = record.id) != null ? _a2 : "");
-      },
-      type: () => {
-        var _a2;
-        return (_a2 = record.type) != null ? _a2 : "";
-      },
-      url: () => {
-        var _a2;
-        return (_a2 = record.link) != null ? _a2 : "";
-      },
-      author_name: () => {
-        var _a2;
-        const authorId = record.author;
-        if (!authorId) return "";
-        const user = select("core").getUser(authorId);
-        return (_a2 = user == null ? void 0 : user.name) != null ? _a2 : "";
-      }
-    };
-    const getter = map[prop];
-    if (!getter) return fail;
-    return { value: getter(), resolved: true };
-  };
-  var resolveSite = (prop) => {
-    const fail = { value: "", resolved: false };
-    const site = select("core").getEntityRecord("root", "site");
-    if (!site) return fail;
-    const map = {
-      name: () => {
-        var _a2;
-        return (_a2 = site.title) != null ? _a2 : "";
-      },
-      description: () => {
-        var _a2;
-        return (_a2 = site.description) != null ? _a2 : "";
-      },
-      url: () => {
-        var _a2;
-        return (_a2 = site.url) != null ? _a2 : "";
-      },
-      language: () => {
-        var _a2;
-        return (_a2 = site.language) != null ? _a2 : "";
-      }
-    };
-    const getter = map[prop];
-    if (!getter) return fail;
-    return { value: getter(), resolved: true };
+    let record;
+    if (root === "site") {
+      record = select("core").getEntityRecord("root", "site");
+    } else if (root === "user") {
+      return fail;
+    } else {
+      if (!postId || !postType) return fail;
+      record = select("core").getEntityRecord("postType", postType, postId);
+    }
+    if (!record) return fail;
+    let value = resolveField(record, entityField);
+    if (propType === "date" && value.includes("T")) {
+      value = value.replace("T", " ");
+    }
+    return { value, resolved: true };
   };
   var stripHtml = (html) => {
-    var _a2;
+    var _a;
     const tmp = document.createElement("div");
     tmp.innerHTML = html;
-    return (_a2 = tmp.textContent) != null ? _a2 : "";
+    return (_a = tmp.textContent) != null ? _a : "";
   };
   var cleanPreview = (val) => {
     if (!val) return val;
@@ -146,20 +126,20 @@
     const { useEffect: useEffect2, useRef: useRef3 } = window.wp.element;
     const lastWritten = useRef3("");
     useEffect2(() => {
-      var _a2, _b2;
+      var _a, _b;
       if (!attrName) return;
       const raw = attributes[attrName];
       const html = typeof raw === "string" ? raw : String(raw != null ? raw : "");
       if (!html.includes("vectarr-expr-token")) return;
-      const editorPostId = ((_b2 = (_a2 = select("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
+      const editorPostId = ((_b = (_a = select("core/editor")) == null ? void 0 : _a.getCurrentPostId) == null ? void 0 : _b.call(_a)) || 0;
       const isQueryChild = postId !== editorPostId;
       if (!isQueryChild && html === lastWritten.current) return;
       const toFetch = /* @__PURE__ */ new Set();
       let needsUpdate = false;
       html.replace(SPAN_TAG_RE, (_match, tagInner, rawExpr) => {
-        var _a3;
+        var _a2;
         if (!rawExpr) return;
-        const existingView = (_a3 = tagInner.match(/\bdata-vectarr-view="([^"]*)"/)) == null ? void 0 : _a3[1];
+        const existingView = (_a2 = tagInner.match(/\bdata-vectarr-view="([^"]*)"/)) == null ? void 0 : _a2[1];
         if (existingView && !isQueryChild) return;
         const expr = decodeAttr(rawExpr);
         const key = cacheKey(expr, postId);
@@ -192,10 +172,10 @@
       Promise.all(
         [...toFetch].map(
           (expr) => fetchPreview(expr, postId).then((r) => {
-            var _a3;
+            var _a2;
             return {
               expr,
-              preview: (_a3 = r == null ? void 0 : r.preview) != null ? _a3 : ""
+              preview: (_a2 = r == null ? void 0 : r.preview) != null ? _a2 : ""
             };
           })
         )
@@ -211,9 +191,9 @@
       });
     }, [attributes[attrName], postId]);
     useEffect2(() => {
-      var _a2, _b2;
+      var _a, _b;
       if (!attrName) return;
-      const editorPostId = ((_b2 = (_a2 = select("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
+      const editorPostId = ((_b = (_a = select("core/editor")) == null ? void 0 : _a.getCurrentPostId) == null ? void 0 : _b.call(_a)) || 0;
       if (postId === editorPostId) return;
       const id = requestAnimationFrame(() => applyViewsDOM(postId, clientId));
       return () => cancelAnimationFrame(id);
@@ -221,9 +201,9 @@
   };
   var applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
     const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, rawExpr) => {
-      var _a2;
+      var _a;
       if (!rawExpr) return fullMatch;
-      const existingView = (_a2 = tagInner.match(/\bdata-vectarr-view="([^"]*)"/)) == null ? void 0 : _a2[1];
+      const existingView = (_a = tagInner.match(/\bdata-vectarr-view="([^"]*)"/)) == null ? void 0 : _a[1];
       if (existingView) return fullMatch;
       const expr = decodeAttr(rawExpr);
       const view = viewCache.get(cacheKey(expr, postId));
@@ -264,371 +244,100 @@
     });
   };
   var getEditorRoot = () => {
-    var _a2;
+    var _a;
     const iframe = document.querySelector('iframe[name="editor-canvas"]');
-    if ((_a2 = iframe == null ? void 0 : iframe.contentDocument) == null ? void 0 : _a2.body) return iframe.contentDocument.body;
+    if ((_a = iframe == null ? void 0 : iframe.contentDocument) == null ? void 0 : _a.body) return iframe.contentDocument.body;
     return document.querySelector(".editor-styles-wrapper") || null;
   };
 
   // modules/editor/constants.js
   var ctx = window.vectarrContext || {};
-  var ICON_POST = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <path d="M4 2h9l4 4v13a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zm9 0v4h4" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/>
-  <path stroke="white" d="M6 9h8M6 12h8M6 15h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-</svg>`;
-  var ICON_USER = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <circle cx="10" cy="6" r="4" stroke="currentColor" stroke-width="1.75"/>
-  <path d="M2 18c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-</svg>`;
-  var ICON_SITE = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75"/>
-  <path d="M10 2C7 5 7 15 10 18M10 2c3 3 3 13 0 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-  <path stroke="white" d="M2 10h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-</svg>`;
-  var ICON_PATTERN = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <path d="M3 5h14M3 10h8M3 15h5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-  <circle stroke="white" cx="13.5" cy="14.5" r="4" stroke="currentColor" stroke-width="1.5"/>
-  <path stroke="green" d="M17 13l-3 3-1.5-1.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`;
-  var ICON_FILTER = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <path d="M4 4h12l-4.5 5.5v6.5l-3 2v-8.5l-4.5-5.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`;
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
-  var VE_COMPLETIONS = [
-    // ── User ──────────────────────────────────────────────────────────────────
-    {
-      label: "User: Display Name",
-      expr: "user.name",
-      preview: ((_a = ctx.user) == null ? void 0 : _a.name) || "Guest",
-      category: "User",
-      prefix: "user"
-    },
-    {
-      label: "User: Email",
-      expr: "user.email",
-      preview: ((_b = ctx.user) == null ? void 0 : _b.email) || "",
-      category: "User",
-      prefix: "user"
-    },
-    {
-      label: "User: Username",
-      expr: "user.login",
-      preview: ((_c = ctx.user) == null ? void 0 : _c.login) || "",
-      category: "User",
-      prefix: "user"
-    },
-    {
-      label: "User: ID",
-      expr: "user.id",
-      preview: ((_d = ctx.user) == null ? void 0 : _d.id) ? String(ctx.user.id) : "1",
-      category: "User",
-      prefix: "user"
-    },
-    {
-      label: "User: Role(s)",
-      expr: "user.roles | join ', '",
-      preview: ((_f = (_e = ctx.user) == null ? void 0 : _e.roles) == null ? void 0 : _f.join(", ")) || "subscriber",
-      category: "User",
-      prefix: "user"
-    },
-    {
-      label: "User: Logged In?",
-      expr: "user.is_logged_in",
-      preview: ((_g = ctx.user) == null ? void 0 : _g.is_logged_in) ? "true" : "false",
-      category: "User",
-      prefix: "user"
-    },
-    {
-      label: "User: Profile URL",
-      expr: "user.url",
-      preview: ((_h = ctx.user) == null ? void 0 : _h.url) || "",
-      category: "User",
-      prefix: "user"
-    },
-    {
-      label: "User: Registered Date",
-      expr: "user.registered",
-      preview: ((_i = ctx.user) == null ? void 0 : _i.registered) || "",
-      category: "User",
-      prefix: "user"
-    },
-    {
-      label: "User: Meta Value",
-      expr: "user.meta.my_key",
-      preview: "",
-      category: "User",
-      prefix: "user"
-    },
-    // ── Post ──────────────────────────────────────────────────────────────────
-    {
-      label: "Post: Title",
-      expr: "post.title",
-      preview: "This is my title",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: Excerpt",
-      expr: "post.excerpt",
-      preview: "This is my excerpt",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: Content",
-      expr: "post.content",
-      preview: "",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: ID",
-      expr: "post.id",
-      preview: "1",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: Slug",
-      expr: "post.slug",
-      preview: "my-post",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: Status",
-      expr: "post.status",
-      preview: "publish",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: Type",
-      expr: "post.type",
-      preview: "post",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: Published Date",
-      expr: "post.date | date",
-      preview: "January 1, 2024",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: Date (formatted)",
-      expr: "post.date | date 'Y-m-d'",
-      preview: "2024-01-01",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: Author Name",
-      expr: "post.author_name",
-      preview: "Author",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: Author ID",
-      expr: "post.author",
-      preview: "",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: URL",
-      expr: "post.url",
-      preview: "",
-      category: "Post",
-      prefix: "post"
-    },
-    {
-      label: "Post: Meta Value",
-      expr: "post.meta.my_key",
-      preview: "",
-      category: "Post",
-      prefix: "post"
-    },
-    // ── Site ──────────────────────────────────────────────────────────────────
-    {
-      label: "Site: Name",
-      expr: "site.name",
-      preview: ((_j = ctx.site) == null ? void 0 : _j.name) || "My Site",
-      category: "Site",
-      prefix: "site"
-    },
-    {
-      label: "Site: Tagline",
-      expr: "site.description",
-      preview: ((_k = ctx.site) == null ? void 0 : _k.description) || "",
-      category: "Site",
-      prefix: "site"
-    },
-    {
-      label: "Site: URL",
-      expr: "site.url",
-      preview: ((_l = ctx.site) == null ? void 0 : _l.url) || "",
-      category: "Site",
-      prefix: "site"
-    },
-    {
-      label: "Site: Language",
-      expr: "site.language",
-      preview: ((_m = ctx.site) == null ? void 0 : _m.language) || "en-US",
-      category: "Site",
-      prefix: "site"
-    },
-    // ── Modifiers ───────────────────────────────────────────────────────────────
-    {
-      label: "Modifier: Render dynamic",
-      expr: "| render",
-      preview: "",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Uppercase",
-      expr: "| upper",
-      preview: "GUEST",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Lowercase",
-      expr: "| lower",
-      preview: "guest",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Default value",
-      expr: "| default 'Guest'",
-      preview: "Guest",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: If / Else",
-      expr: "| if then='Welcome' else='Log in'",
-      preview: "Welcome",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Match value",
-      expr: "| match publish='Live' draft='Draft' default='Other'",
-      preview: "Live",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Join array",
-      expr: "| join ', '",
-      preview: "News, Updates",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Pluck key",
-      expr: "| map key='title'",
-      preview: "",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Format date",
-      expr: "| date 'F j, Y'",
-      preview: "January 1, 2024",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Escape HTML",
-      expr: "| esc_html",
-      preview: "",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Raw HTML",
-      expr: "| raw",
-      preview: "",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Resolve author",
-      expr: "| get_user",
-      preview: "",
-      category: "Modifier",
-      prefix: "|"
-    },
-    {
-      label: "Modifier: Other post meta",
-      expr: "| get_post | get_meta key='subtitle'",
-      preview: "",
-      category: "Modifier",
-      prefix: "|"
-    },
-    // ── Common patterns ───────────────────────────────────────────────────────
-    {
-      label: "Pattern: Greeting by name",
-      expr: "user.is_logged_in ? 'Hello, ' + user.name : 'Hello, Guest'",
-      preview: "Hello, Guest",
-      category: "Pattern",
-      prefix: ""
-    },
-    {
-      label: "Pattern: Conditional class",
-      expr: "user.is_logged_in ? 'member' : 'visitor'",
-      preview: "visitor",
-      category: "Pattern",
-      prefix: ""
-    },
-    {
-      label: "Pattern: Show role label",
-      expr: "user.roles | join ', ' | match administrator='Admin' editor='Editor' default='Member'",
-      preview: "Member",
-      category: "Pattern",
-      prefix: ""
-    },
-    {
-      label: "Pattern: Author with fallback",
-      expr: "post.author_name | default 'Unknown Author'",
-      preview: "Unknown Author",
-      category: "Pattern",
-      prefix: ""
-    },
-    {
-      label: "Pattern: Post date",
-      expr: "post.date | date 'F j, Y'",
-      preview: "January 1, 2024",
-      category: "Pattern",
-      prefix: "post"
-    },
-    {
-      label: "Pattern: Meta with fallback",
-      expr: "post.meta.subtitle | default post.title",
-      preview: "",
-      category: "Pattern",
-      prefix: ""
-    },
-    {
-      label: "Pattern: Site + Post title",
-      expr: "post.title + ' \u2014 ' + site.name",
-      preview: "Post Title \u2014 My Site",
-      category: "Pattern",
-      prefix: ""
+  var config2 = window.vectarrEditorConfig || {};
+  var icons = config2.icons || {};
+  var CATEGORY_ICONS = Object.fromEntries([
+    ...(config2.roots || []).map((r) => [r.label, r.icon || icons.modifier || ""]),
+    ["Pattern", icons.pattern || ""],
+    ["Modifier", icons.modifier || ""]
+  ]);
+  var buildRoots = () => {
+    const roots = (config2.roots || []).map((r) => ({
+      label: r.label,
+      description: r.description,
+      icon: r.icon || icons.modifier || "",
+      prefix: r.id,
+      group: r.group || "",
+      accent: r.accent || ""
+    }));
+    roots.push({
+      label: "Patterns",
+      description: "Ready-made expressions for common tasks",
+      icon: icons.pattern || "",
+      prefix: "_pattern"
+    });
+    return roots;
+  };
+  var VE_ROOTS = buildRoots();
+  var resolvePreview = (rootId, key) => {
+    const rootData = ctx[rootId];
+    if (!rootData) return "";
+    const val = rootData[key];
+    if (val == null) return "";
+    if (Array.isArray(val)) return val.join(", ");
+    if (typeof val === "boolean") return val ? "true" : "false";
+    return String(val);
+  };
+  var buildCompletions = () => {
+    const completions = [];
+    for (const root of config2.roots || []) {
+      const label = root.label;
+      const prefix = root.id;
+      const category = label;
+      for (const prop of root.properties || []) {
+        const expr = prop.expr || `${prefix}.${prop.key}`;
+        completions.push({
+          label: `${label}: ${prop.label}`,
+          expr,
+          preview: resolvePreview(prefix, prop.key),
+          category,
+          prefix
+        });
+      }
     }
-  ];
+    for (const mod of config2.modifiers || []) {
+      const cat = mod.category || "Modifier";
+      completions.push({
+        label: `${cat}: ${mod.name}`,
+        expr: mod.usage || `| ${mod.name}`,
+        preview: "",
+        category: cat,
+        group: mod.group || "",
+        prefix: "|"
+      });
+    }
+    for (const pat of config2.patterns || []) {
+      completions.push({
+        label: `Pattern: ${pat.label}`,
+        expr: pat.expr,
+        preview: "",
+        category: "Pattern",
+        prefix: ""
+      });
+    }
+    return completions;
+  };
+  var VE_COMPLETIONS = buildCompletions();
   var getCompletions = () => {
-    var _a2, _b2;
-    return ((_b2 = (_a2 = window.wp) == null ? void 0 : _a2.hooks) == null ? void 0 : _b2.applyFilters) ? window.wp.hooks.applyFilters(
+    var _a, _b;
+    const raw = ((_b = (_a = window.wp) == null ? void 0 : _a.hooks) == null ? void 0 : _b.applyFilters) ? window.wp.hooks.applyFilters(
       "vector_expressions.editor.completions",
       VE_COMPLETIONS
     ) : VE_COMPLETIONS;
+    const seen = /* @__PURE__ */ new Set();
+    return raw.filter((c) => {
+      if (seen.has(c.expr)) return false;
+      seen.add(c.expr);
+      return true;
+    });
   };
   var SKIP_CONVERT_BLOCKS = /* @__PURE__ */ new Set([
     "core/code",
@@ -810,13 +519,13 @@
       let interval = null;
       let el2 = null;
       const onKeyDown = (evt) => {
-        var _a2, _b2, _c2, _d2;
+        var _a, _b, _c, _d;
         if (!el2) return;
         const { key } = evt;
         if (key === "Escape" && refs2.tokenActiveRef.current) {
           evt.preventDefault();
           evt.stopPropagation();
-          (_b2 = (_a2 = refs2.dismissRef).current) == null ? void 0 : _b2.call(_a2);
+          (_b = (_a = refs2.dismissRef).current) == null ? void 0 : _b.call(_a);
           return;
         }
         if (key === "Tab") {
@@ -851,7 +560,7 @@
             if (inside || !range.collapsed) {
               evt.preventDefault();
               evt.stopPropagation();
-              (_d2 = (_c2 = refs2.openSidebarRef).current) == null ? void 0 : _d2.call(_c2);
+              (_d = (_c = refs2.openSidebarRef).current) == null ? void 0 : _d.call(_c);
             }
             return;
           }
@@ -886,56 +595,95 @@
       };
     }, []);
   };
-  var VE_PATTERNS_DEFAULT = [
-    { expr: "post.title | default 'Untitled'", label: "Post title with fallback" },
-    { expr: "user.is_logged_in ? user.name : 'Guest'", label: "Greeting (logged in)" },
-    { expr: "post.date | date 'F j, Y'", label: "Formatted publish date" },
-    { expr: "post.meta.your_field | default ''", label: "Custom field value" },
-    { expr: "site.name | upper", label: "Site name \u2014 uppercase" },
-    { expr: "user.name | default 'Friend'", label: "Display name with fallback" },
-    { expr: "post.author_name", label: "Post author name" },
-    { expr: "post.excerpt | default post.content", label: "Excerpt or full content" }
-  ];
+  var config3 = window.vectarrEditorConfig || {};
   var getPatterns = () => {
+    const patterns = (config3.patterns || []).map((p) => ({
+      expr: p.expr,
+      label: p.label,
+      category: p.category || null
+    }));
     const { applyFilters: applyFilters2 } = window.wp.hooks;
-    return applyFilters2 ? applyFilters2("vectorExpressions.suggestions.patterns", VE_PATTERNS_DEFAULT) : VE_PATTERNS_DEFAULT;
+    const raw = applyFilters2 ? applyFilters2("vectorExpressions.suggestions.patterns", patterns) : patterns;
+    const seen = /* @__PURE__ */ new Set();
+    return raw.filter((p) => {
+      if (seen.has(p.expr)) return false;
+      seen.add(p.expr);
+      return true;
+    });
   };
   var getCategories = (completions) => {
+    var _a;
     const seen = /* @__PURE__ */ new Map();
     for (const item of completions) {
       const cat = item.category;
       if (!cat || cat === "Pattern") continue;
+      const group = item.group || "";
+      const compositeKey = group ? `${group}:${cat.toLowerCase()}` : cat.toLowerCase();
       if (!seen.has(cat)) {
-        seen.set(cat, { key: cat.toLowerCase(), label: cat, items: [] });
+        seen.set(cat, { key: compositeKey, label: cat, items: [] });
       }
       seen.get(cat).items.push(item);
     }
-    const cats = [...seen.values()];
-    cats.push({ key: "pattern", label: __("Patterns", "vector-expressions"), items: getPatterns() });
+    const patterns = getPatterns();
+    const patternBuckets = /* @__PURE__ */ new Map();
+    const rootMap = (config3.roots || []).reduce((m, r) => ({ ...m, [r.id]: r.label }), {});
+    for (const p of patterns) {
+      if (p.category) {
+        const catLabel2 = p.category;
+        if (!patternBuckets.has(catLabel2)) {
+          patternBuckets.set(catLabel2, { key: catLabel2.toLowerCase().replace(/\s+/g, "-"), label: catLabel2, items: [] });
+        }
+        patternBuckets.get(catLabel2).items.push(p);
+        continue;
+      }
+      const root = (_a = (p.expr || "").split(".")[0]) == null ? void 0 : _a.toLowerCase();
+      const catLabel = rootMap[root];
+      if (catLabel) {
+        const bucketLabel = catLabel + " Patterns";
+        if (!patternBuckets.has(bucketLabel)) {
+          patternBuckets.set(bucketLabel, { key: bucketLabel.toLowerCase().replace(/\s+/g, "-"), label: bucketLabel, items: [] });
+        }
+        patternBuckets.get(bucketLabel).items.push({ ...p, category: bucketLabel });
+      }
+    }
+    const cats = [...seen.values(), ...patternBuckets.values()];
     const { applyFilters: applyFilters2 } = window.wp.hooks;
     return applyFilters2 ? applyFilters2("vectorExpressions.suggestions.categories", cats, completions) : cats;
   };
   var ExpressionSuggestions = ({ expr, onSelect }) => {
     const [search, setSearch] = useState("");
     const [open, setOpen] = useState({});
+    const [activeFilter, setFilter] = useState(null);
+    const suggestionsRef = useRef2(null);
     const completions = getCompletions();
     const categories = getCategories(completions);
-    const query = search.toLowerCase().trim();
+    const rawQuery = search.trim();
+    const query = rawQuery.toLowerCase();
     const searching = query.length > 0;
+    const searchTokens = query.split(/\s+/).filter(Boolean);
+    const headingMatches = (label) => {
+      if (!searching || !label) return false;
+      const h2 = label.toLowerCase();
+      return searchTokens.every((t) => h2.includes(t));
+    };
     const toggle = (key) => {
       setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
     };
-    const filterItems = (items) => {
-      if (!searching) return items;
-      return items.filter(
-        (s) => (s.expr || "").toLowerCase().includes(query) || (s.label || "").toLowerCase().includes(query)
-      );
+    const toggleFilter = (key) => {
+      setFilter((prev) => prev === key ? null : key);
+    };
+    const filterItems = (items, parentMatch = false) => {
+      if (!searching || parentMatch) return items;
+      return items.filter((s) => {
+        const haystack = [s.expr, s.label, s.hint, s.category].filter(Boolean).join(" ").toLowerCase();
+        return searchTokens.every((token) => haystack.includes(token));
+      });
     };
     const handleSelect = (s) => {
-      const isPattern = !("category" in s) && !("prefix" in s);
+      var _a;
       const insertExpr = s.expr;
       let newValue = insertExpr;
-      if (s.category === "Modifier") {
+      if ((_a = s.category) == null ? void 0 : _a.endsWith("Modifier")) {
         let appended = expr.trim();
         if (!appended.endsWith("|") && appended.length > 0) {
           appended += " ";
@@ -944,26 +692,28 @@
       }
       onSelect(newValue);
     };
-    return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions" }, /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions-search" }, /* @__PURE__ */ wp.element.createElement(
-      "input",
-      {
-        type: "text",
-        className: "components-text-control__input",
-        placeholder: __("Filter suggestions\u2026", "vector-expressions"),
-        value: search,
-        onChange: (e) => setSearch(e.target.value)
+    const chipLabel = (s) => {
+      const raw = s.label || s.expr;
+      if (s.category) {
+        const prefix = s.category + ": ";
+        if (raw.startsWith(prefix)) return raw.slice(prefix.length);
       }
-    )), categories.map((cat) => {
-      const filtered = filterItems(cat.items);
-      if (searching && filtered.length === 0) return null;
-      const isOpen = searching || !!open[cat.key];
-      return /* @__PURE__ */ wp.element.createElement("div", { key: cat.key, className: "vectarr-suggestions-group" }, /* @__PURE__ */ wp.element.createElement(
+      return raw;
+    };
+    const renderCategory = (cat, indented = false, parentMatch = false) => {
+      const catMatch = headingMatches(cat.label);
+      const filtered = filterItems(cat.items || [], catMatch || parentMatch);
+      if (searching && filtered.length === 0 && !catMatch) return null;
+      const isOpen = searching || !!activeFilter || !!open[cat.key];
+      const classes = "vectarr-suggestions-group" + (indented ? " vectarr-suggestions-group--nested" : "");
+      return /* @__PURE__ */ wp.element.createElement("div", { key: cat.key, className: classes }, /* @__PURE__ */ wp.element.createElement(
         "button",
         {
-          className: "vectarr-suggestions-header" + (isOpen ? " is-open" : ""),
+          className: "vectarr-suggestions-header" + (isOpen ? " is-open" : "") + (indented ? " vectarr-suggestions-header--sub" : ""),
           onClick: () => !searching && toggle(cat.key),
           "aria-expanded": isOpen
         },
+        cat.accent && /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-suggestions-accent vectarr-suggestions-accent--" + cat.accent }),
         /* @__PURE__ */ wp.element.createElement("span", null, cat.label),
         /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-suggestions-count" }, filtered.length),
         !searching && /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-suggestions-arrow" }, isOpen ? "\u25B2" : "\u25BC")
@@ -977,9 +727,144 @@
           onMouseDown: (e) => e.preventDefault(),
           onClick: () => handleSelect(s)
         },
-        (s.label || s.expr).replace(/^(Post|User|Site|Modifier):\s*/, "")
+        chipLabel(s)
       ))));
-    }));
+    };
+    const renderGroup = (group) => {
+      const groupMatch = headingMatches(group.label);
+      let totalVisible = 0;
+      const visibleCats = (group.categories || []).filter((cat) => {
+        const catMatch = headingMatches(cat.label);
+        const filtered = filterItems(cat.items || [], groupMatch || catMatch);
+        totalVisible += filtered.length;
+        return !searching || filtered.length > 0 || catMatch;
+      });
+      if (visibleCats.length === 0) return null;
+      const isOpen = searching || !!activeFilter || !!open[group.key];
+      return /* @__PURE__ */ wp.element.createElement("div", { key: group.key, className: "vectarr-suggestions-group vectarr-suggestions-group--parent", "data-group-key": group.key }, /* @__PURE__ */ wp.element.createElement(
+        "button",
+        {
+          className: "vectarr-suggestions-header vectarr-suggestions-header--group" + (isOpen ? " is-open" : ""),
+          onClick: () => !searching && toggle(group.key),
+          "aria-expanded": isOpen
+        },
+        group.icon && /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-suggestions-group-icon", dangerouslySetInnerHTML: { __html: group.icon } }),
+        /* @__PURE__ */ wp.element.createElement("span", null, group.label),
+        /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-suggestions-count" }, totalVisible),
+        !searching && /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-suggestions-arrow" }, isOpen ? "\u25B2" : "\u25BC")
+      ), isOpen && /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions-group-body" }, visibleCats.map((cat) => renderCategory(cat, true, groupMatch))));
+    };
+    return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions", ref: suggestionsRef }, /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-discovery-header" }, /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-discovery-label" }, __("Browse Data & Filters", "vector-expressions")), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-discovery-search" }, /* @__PURE__ */ wp.element.createElement("svg", { className: "vectarr-discovery-search-icon", width: "14", height: "14", viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" }, /* @__PURE__ */ wp.element.createElement("circle", { cx: "8.5", cy: "8.5", r: "5.5" }), /* @__PURE__ */ wp.element.createElement("path", { d: "M14 14l4 4" })), /* @__PURE__ */ wp.element.createElement(
+      "input",
+      {
+        type: "text",
+        placeholder: __("Filter suggestions\u2026", "vector-expressions"),
+        value: search,
+        onChange: (e) => setSearch(e.target.value)
+      }
+    ))), categories.some((e) => e.categories) && /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-root-strip", role: "navigation", "aria-label": __("Filter by group", "vector-expressions") }, categories.filter((e) => e.categories).map((group) => /* @__PURE__ */ wp.element.createElement(
+      "button",
+      {
+        key: group.key,
+        className: "vectarr-root-strip-btn" + (activeFilter === group.key ? " is-active" : ""),
+        onClick: () => toggleFilter(group.key),
+        title: group.label,
+        "aria-label": group.label
+      },
+      group.icon ? /* @__PURE__ */ wp.element.createElement("span", { dangerouslySetInnerHTML: { __html: group.icon } }) : /* @__PURE__ */ wp.element.createElement("span", null, group.label.charAt(0))
+    ))), categories.filter((entry) => !activeFilter || entry.key === activeFilter).map(
+      (entry) => entry.categories ? renderGroup(entry) : renderCategory(entry)
+    ), !searching && !activeFilter && Object.keys(open).every((k) => !open[k]) && (() => {
+      var _a;
+      const trimmed = (expr || "").trim();
+      const root = (_a = trimmed.split(".")[0]) == null ? void 0 : _a.toLowerCase();
+      const hasPipe = trimmed.includes("|");
+      const hasTernary = trimmed.includes("?");
+      if (!trimmed) {
+        const quickstartItems = (config3.quickstart || []).map((qs) => ({
+          expr: qs.expr,
+          label: qs.label
+        }));
+        if (quickstartItems.length === 0) return null;
+        return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions-quickstart" }, /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-suggestions-quickstart-label" }, __("Quick Start", "vector-expressions")), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions-quickstart-items" }, quickstartItems.map((qs) => /* @__PURE__ */ wp.element.createElement(
+          Button,
+          {
+            key: qs.expr,
+            variant: "secondary",
+            size: "small",
+            className: "vectarr-suggestion-chip vectarr-suggestion-chip--quickstart",
+            onMouseDown: (e) => e.preventDefault(),
+            onClick: () => handleSelect(qs)
+          },
+          qs.label
+        ))));
+      }
+      if (hasTernary && !hasPipe) {
+        return null;
+      }
+      const dotParts = trimmed.split(/\s*\|/)[0].trim().split(".");
+      const property = dotParts.length > 1 ? dotParts.slice(1).join(".").toLowerCase() : "";
+      const propType = (() => {
+        for (const r of config3.roots || []) {
+          if (r.id !== root) continue;
+          for (const p of r.properties || []) {
+            if (p.key === property) return p.type || "string";
+          }
+        }
+        return "string";
+      })();
+      const isDate = propType === "date";
+      const isImage = propType === "image";
+      const isHTML = propType === "html";
+      const isArray = propType === "array";
+      const isPrice = propType === "price";
+      const appliedMods = new Set(
+        (trimmed.match(/\|\s*(\w+)/g) || []).map((m) => m.replace(/\|\s*/, "").toLowerCase())
+      );
+      const contextLabel = hasPipe ? __("Add Another Modifier", "vector-expressions") : __("Try a Modifier", "vector-expressions");
+      const scoreModifier = (c) => {
+        const modName = (c.expr || "").replace(/^\|\s*/, "").split(/\s/)[0].toLowerCase();
+        if (appliedMods.has(modName)) return -1;
+        if (isDate && modName === "date") return 100;
+        if (isImage && (modName === "thumbnail" || modName === "mb_image")) return 100;
+        if (isHTML && ["strip_tags", "wp_excerpt", "word_count", "reading_time", "nl2br", "raw"].includes(modName)) return 90;
+        if (isArray && ["join", "count", "first", "last", "sort", "reverse", "pluck"].includes(modName)) return 90;
+        if (isPrice && modName === "wc_price") return 100;
+        if (root === "acf" && c.category === "ACF Modifier") return 50;
+        if (["mb", "mb_setting", "mb_user", "mb_term"].includes(root) && c.category === "MB Modifier") return 50;
+        if (["woo_product", "woo_shop", "woo_cart"].includes(root) && c.category === "WC Modifier") return 50;
+        if (c.category === "Modifier" || c.category === "WP Modifier") {
+          if (["get_user", "get_post"].includes(modName) && root !== "post") return -1;
+          if (["terms", "categories", "tags"].includes(modName) && root !== "post") return -1;
+          if (modName === "date" && !isDate) return 5;
+          if (["sort", "reverse", "first", "last", "pluck"].includes(modName) && !isArray) return 3;
+          if (["strip_tags", "nl2br", "wp_excerpt", "word_count", "reading_time"].includes(modName) && !isHTML) return 3;
+          if (modName === "thumbnail" && !isImage) return 3;
+          if (["upper", "lower", "default", "if", "match", "esc_html", "count"].includes(modName)) return 40;
+          return 20;
+        }
+        return -1;
+      };
+      const scored = completions.filter((c) => c.category && c.category.endsWith("Modifier")).map((c) => ({ ...c, _score: scoreModifier(c) })).filter((c) => c._score > 0).sort((a, b) => b._score - a._score);
+      const rootPatterns = completions.filter(
+        (c) => c.category === "Pattern" && (c.expr || "").toLowerCase().startsWith(root + ".")
+      );
+      const suggestions = [...scored.slice(0, 6), ...rootPatterns.slice(0, 2)];
+      if (suggestions.length === 0) return null;
+      return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions-quickstart" }, /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-suggestions-quickstart-label" }, contextLabel), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-suggestions-quickstart-items" }, suggestions.map((s) => /* @__PURE__ */ wp.element.createElement(
+        Button,
+        {
+          key: s.expr + (s.label || ""),
+          variant: "secondary",
+          size: "small",
+          className: "vectarr-suggestion-chip vectarr-suggestion-chip--quickstart",
+          onMouseDown: (e) => e.preventDefault(),
+          onClick: () => handleSelect(s),
+          title: s.expr
+        },
+        chipLabel(s)
+      ))));
+    })());
   };
   var ExpressionEdit = ({ isActive, activeAttributes, value, onChange, contentRef }) => {
     const isActiveRef = useRef2(false);
@@ -1018,10 +903,10 @@
       }
     }, [isActive]);
     const applyUpdate = useCallback2((exprOverride) => {
-      var _a2, _b2;
+      var _a, _b;
       const expr = (exprOverride != null ? exprOverride : select2(STORE_NAME).getExpr()).trim();
       if (!expr) return;
-      const postId = ((_b2 = (_a2 = select2("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
+      const postId = ((_b = (_a = select2("core/editor")) == null ? void 0 : _a.getCurrentPostId) == null ? void 0 : _b.call(_a)) || 0;
       const cached = getCachedView(expr, postId);
       const attrs = { expr, contentEditable: "false" };
       if (cached !== void 0) {
@@ -1035,12 +920,12 @@
       onChange(next);
     }, [value, onChange]);
     const applyRemove = useCallback2(() => {
-      var _a2;
-      const formats = (_a2 = value.formats) != null ? _a2 : [];
+      var _a;
+      const formats = (_a = value.formats) != null ? _a : [];
       let pivot = value.start;
       const hasFormat = (i) => {
-        var _a3;
-        return (_a3 = formats[i]) == null ? void 0 : _a3.some((f) => f.type === "vector/expression");
+        var _a2;
+        return (_a2 = formats[i]) == null ? void 0 : _a2.some((f) => f.type === "vector/expression");
       };
       if (pivot > 0 && !hasFormat(pivot) && hasFormat(pivot - 1)) pivot--;
       if (!hasFormat(pivot)) {
@@ -1078,8 +963,8 @@
       }
       let cancelled = false;
       const id = setTimeout(async () => {
-        var _a2, _b2;
-        const postId = ((_b2 = (_a2 = select2("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
+        var _a, _b;
+        const postId = ((_b = (_a = select2("core/editor")) == null ? void 0 : _a.getCurrentPostId) == null ? void 0 : _b.call(_a)) || 0;
         const view = await fetchPreview(storeExpr.trim(), postId);
         if (!cancelled) storeDispatch.setPreview(view);
       }, 300);
@@ -1173,16 +1058,7 @@
     );
   };
   var renderOption = (o) => {
-    let iconSvg = ICON_FILTER;
-    if (o.category === "Post") {
-      iconSvg = ICON_POST;
-    } else if (o.category === "User") {
-      iconSvg = ICON_USER;
-    } else if (o.category === "Site") {
-      iconSvg = ICON_SITE;
-    } else if (o.category === "Pattern") {
-      iconSvg = ICON_PATTERN;
-    }
+    const iconSvg = CATEGORY_ICONS[o.category] || "";
     return el(
       "div",
       {
@@ -1389,12 +1265,12 @@
   };
   var LogicPanel = createHigherOrderComponent((BlockEdit) => {
     return (props) => {
-      var _a2, _b2, _c2, _d2;
+      var _a, _b, _c, _d;
       const { attributes, setAttributes, name, context, clientId } = props;
       const { vectarr_logic } = attributes;
       const attrName = useMemo2(() => getRichTextAttrName(name), [name]);
-      const postId = (context == null ? void 0 : context.postId) || ((_b2 = (_a2 = select3("core/editor")) == null ? void 0 : _a2.getCurrentPostId) == null ? void 0 : _b2.call(_a2)) || 0;
-      const postType = (context == null ? void 0 : context.postType) || ((_d2 = (_c2 = select3("core/editor")) == null ? void 0 : _c2.getCurrentPostType) == null ? void 0 : _d2.call(_c2)) || "post";
+      const postId = (context == null ? void 0 : context.postId) || ((_b = (_a = select3("core/editor")) == null ? void 0 : _a.getCurrentPostId) == null ? void 0 : _b.call(_a)) || 0;
+      const postType = (context == null ? void 0 : context.postType) || ((_d = (_c = select3("core/editor")) == null ? void 0 : _c.getCurrentPostType) == null ? void 0 : _d.call(_c)) || "post";
       const wrappedSetAttributes = usePass1Conversion(setAttributes, attrName, name, postId);
       const newProps = { ...props, setAttributes: wrappedSetAttributes };
       useHydrateViews(attributes, setAttributes, attrName, name, postId, postType, clientId);
@@ -1466,16 +1342,19 @@
     const { updateExpr } = useDispatch2(STORE_NAME);
     const refs2 = getTokenRefs();
     const handleApply = () => {
-      var _a2, _b2;
-      (_a2 = refs2.applyUpdate) == null ? void 0 : _a2.call(refs2, expr);
-      (_b2 = refs2.dismiss) == null ? void 0 : _b2.call(refs2);
+      var _a, _b;
+      (_a = refs2.applyUpdate) == null ? void 0 : _a.call(refs2, expr);
+      (_b = refs2.dismiss) == null ? void 0 : _b.call(refs2);
     };
     const handleRemove = () => {
-      var _a2, _b2;
-      (_a2 = refs2.applyRemove) == null ? void 0 : _a2.call(refs2);
-      (_b2 = refs2.dismiss) == null ? void 0 : _b2.call(refs2);
+      var _a, _b;
+      (_a = refs2.applyRemove) == null ? void 0 : _a.call(refs2);
+      (_b = refs2.dismiss) == null ? void 0 : _b.call(refs2);
     };
-    return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-expression-editor" }, /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-expr-editor-field" }, /* @__PURE__ */ wp.element.createElement("label", { className: "components-base-control__label" }, __3("Expression", "vector-expressions")), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-expr-field" }, /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-expr-brace", "aria-hidden": "true" }, "{{ "), /* @__PURE__ */ wp.element.createElement(
+    const isValid = preview == null ? void 0 : preview.valid;
+    const hasExpr = expr.trim().length > 0;
+    const statusColor = !hasExpr ? "#e0e0e0" : isValid ? "#5df4a3" : "#cc1818";
+    return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-expression-editor" }, /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-console-card" }, /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-expr-field" }, /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-expr-brace", "aria-hidden": "true" }, "{{ "), /* @__PURE__ */ wp.element.createElement(
       AutoTextarea,
       {
         className: "vectarr-expr-input vectarr-class-textarea",
@@ -1483,11 +1362,11 @@
         onChange: updateExpr,
         placeholder: "user.is_logged_in",
         onKeyDown: (e) => {
-          var _a2;
+          var _a;
           if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
-            (_a2 = refs2.dismiss) == null ? void 0 : _a2.call(refs2);
+            (_a = refs2.dismiss) == null ? void 0 : _a.call(refs2);
             return;
           }
           if (e.key === "Enter" && !e.shiftKey) {
@@ -1496,52 +1375,36 @@
           }
         }
       }
-    ), /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-expr-brace", "aria-hidden": "true" }, " }}"))), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-live-preview", style: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: "8px",
-      marginTop: "12px",
-      background: !preview || !preview.valid ? "#fcf0f1" : "#f0f0f0",
-      padding: "12px",
-      borderRadius: "4px",
-      border: "1px solid " + (!preview || !preview.valid ? "#cc1818" : "#e0e0e0")
-    } }, /* @__PURE__ */ wp.element.createElement("div", { style: { display: "flex", alignItems: "center", gap: "8px", color: "#1e1e1e", fontSize: "12px" } }, /* @__PURE__ */ wp.element.createElement("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" }, /* @__PURE__ */ wp.element.createElement("path", { d: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" }), /* @__PURE__ */ wp.element.createElement("circle", { cx: "12", cy: "12", r: "3" })), /* @__PURE__ */ wp.element.createElement("span", null, __3("Preview", "vector-expressions"))), /* @__PURE__ */ wp.element.createElement("code", { style: {
-      color: !preview || !preview.valid ? "#cc1818" : "#39b074",
-      maxWidth: "160px",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap",
-      fontSize: "14px",
-      fontFamily: "monospace"
-    } }, !preview || !preview.valid ? expr ? (preview == null ? void 0 : preview.preview) || __3("Invalid syntax", "vector-expressions") : "" : String(preview.preview))), /* @__PURE__ */ wp.element.createElement(
-      ExpressionSuggestions,
-      {
-        expr,
-        onSelect: updateExpr
-      }
-    ), /* @__PURE__ */ wp.element.createElement("footer", { style: { display: "flex", justifyContent: "space-between", marginTop: "16px" } }, /* @__PURE__ */ wp.element.createElement(
+    ), /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-expr-brace", "aria-hidden": "true" }, " }}")), /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-console-status", style: { borderTopColor: statusColor } }, /* @__PURE__ */ wp.element.createElement("span", { className: "vectarr-console-dot" + (isValid ? " is-valid" : "") }), /* @__PURE__ */ wp.element.createElement("code", { className: "vectarr-console-preview" }, !hasExpr ? "" : isValid ? String(preview.preview) : (preview == null ? void 0 : preview.preview) || __3("Invalid syntax", "vector-expressions")))), /* @__PURE__ */ wp.element.createElement("footer", { className: "vectarr-console-actions" }, /* @__PURE__ */ wp.element.createElement(
       Button3,
       {
-        variant: "secondary",
+        variant: "tertiary",
         isDestructive: true,
-        onClick: handleRemove
+        onClick: handleRemove,
+        className: "vectarr-console-btn-remove"
       },
       __3("Remove", "vector-expressions")
     ), /* @__PURE__ */ wp.element.createElement(
       Button3,
       {
         variant: "primary",
-        onClick: handleApply
+        onClick: handleApply,
+        className: "vectarr-console-btn-apply"
       },
       __3("Apply", "vector-expressions")
-    )));
+    )), /* @__PURE__ */ wp.element.createElement(
+      ExpressionSuggestions,
+      {
+        expr,
+        onSelect: updateExpr
+      }
+    ));
   };
   var DEFAULT_TABS = [
     { name: "logic", title: /* @__PURE__ */ wp.element.createElement(LogicTabIcon, null), className: "vectarr-sidebar-tab" }
   ];
   var VectorSidebarPanel = () => {
-    var _a2;
+    var _a;
     const { selectedBlock, blockName } = useSelect2((sel) => {
       const block = sel("core/block-editor").getSelectedBlock();
       return {
@@ -1572,7 +1435,7 @@
       });
     };
     if (tabs.length <= 1) {
-      const tabName = ((_a2 = tabs[0]) == null ? void 0 : _a2.name) || "logic";
+      const tabName = ((_a = tabs[0]) == null ? void 0 : _a.name) || "logic";
       if (tabName === "expression") {
         return /* @__PURE__ */ wp.element.createElement("div", { className: "vectarr-sidebar-tab-content" }, /* @__PURE__ */ wp.element.createElement(ExpressionTabContent, null));
       }

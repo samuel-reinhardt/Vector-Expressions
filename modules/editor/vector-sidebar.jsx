@@ -89,13 +89,14 @@ const ExpressionTabContent = () => {
 		refs.dismiss?.();
 	};
 
+	const isValid  = preview?.valid;
+	const hasExpr  = expr.trim().length > 0;
+	const statusColor = ! hasExpr ? '#e0e0e0' : ( isValid ? '#5df4a3' : '#cc1818' );
+
 	return (
 		<div className="vectarr-expression-editor">
-			{/* Expression Input */}
-			<div className="vectarr-expr-editor-field">
-				<label className="components-base-control__label">
-					{ __( 'Expression', 'vector-expressions' ) }
-				</label>
+			{/* Console Card — input + status bar */}
+			<div className="vectarr-console-card">
 				<div className="vectarr-expr-field">
 					<span className="vectarr-expr-brace" aria-hidden="true">{'{{ '}</span>
 					<AutoTextarea
@@ -118,62 +119,43 @@ const ExpressionTabContent = () => {
 					/>
 					<span className="vectarr-expr-brace" aria-hidden="true">{' }}'}</span>
 				</div>
-			</div>
-
-			{/* Live Preview */}
-			<div className="vectarr-live-preview" style={ {
-				display: 'flex',
-				alignItems: 'center',
-				justifyContent: 'space-between',
-				gap: '8px',
-				marginTop: '12px',
-				background: ! preview || ! preview.valid ? '#fcf0f1' : '#f0f0f0',
-				padding: '12px',
-				borderRadius: '4px',
-				border: '1px solid ' + ( ! preview || ! preview.valid ? '#cc1818' : '#e0e0e0' ),
-			} }>
-				<div style={ { display: 'flex', alignItems: 'center', gap: '8px', color: '#1e1e1e', fontSize: '12px' } }>
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-					<span>{ __( 'Preview', 'vector-expressions' ) }</span>
+				<div className="vectarr-console-status" style={ { borderTopColor: statusColor } }>
+					<span className={ 'vectarr-console-dot' + ( isValid ? ' is-valid' : '' ) } />
+					<code className="vectarr-console-preview">
+						{ ! hasExpr
+							? ''
+							: isValid
+								? String( preview.preview )
+								: ( preview?.preview || __( 'Invalid syntax', 'vector-expressions' ) )
+						}
+					</code>
 				</div>
-				<code style={ {
-					color: ! preview || ! preview.valid ? '#cc1818' : '#39b074',
-					maxWidth: '160px',
-					overflow: 'hidden',
-					textOverflow: 'ellipsis',
-					whiteSpace: 'nowrap',
-					fontSize: '14px',
-					fontFamily: 'monospace',
-				} }>
-					{ ! preview || ! preview.valid
-						? ( expr ? ( preview?.preview || __( 'Invalid syntax', 'vector-expressions' ) ) : '' )
-						: String( preview.preview )
-					}
-				</code>
 			</div>
 
-			{/* Suggestions */}
-			<ExpressionSuggestions
-				expr={ expr }
-				onSelect={ updateExpr }
-			/>
-
-			{/* Footer Actions */}
-			<footer style={ { display: 'flex', justifyContent: 'space-between', marginTop: '16px' } }>
+			{/* Actions */}
+			<footer className="vectarr-console-actions">
 				<Button
-					variant="secondary"
+					variant="tertiary"
 					isDestructive
 					onClick={ handleRemove }
+					className="vectarr-console-btn-remove"
 				>
 					{ __( 'Remove', 'vector-expressions' ) }
 				</Button>
 				<Button
 					variant="primary"
 					onClick={ handleApply }
+					className="vectarr-console-btn-apply"
 				>
 					{ __( 'Apply', 'vector-expressions' ) }
 				</Button>
 			</footer>
+
+			{/* Suggestions */}
+			<ExpressionSuggestions
+				expr={ expr }
+				onSelect={ updateExpr }
+			/>
 		</div>
 	);
 };

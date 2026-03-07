@@ -18,14 +18,7 @@
  * popover chips (ExpressionSuggestions) where it works correctly.
  */
 
-import {
-  getCompletions,
-  ICON_POST,
-  ICON_USER,
-  ICON_SITE,
-  ICON_PATTERN,
-  ICON_FILTER,
-} from "./constants.js";
+import { getCompletions, CATEGORY_ICONS } from "./constants.js";
 
 const { addFilter } = window.wp.hooks;
 const { createElement: el, RawHTML } = window.wp.element;
@@ -82,18 +75,7 @@ const getOptions = (query) => {
  * @returns {JSX.Element}
  */
 const renderOption = (o) => {
-  // Map category to a predefined SVG icon string
-  let iconSvg = ICON_FILTER;
-
-  if (o.category === "Post") {
-    iconSvg = ICON_POST;
-  } else if (o.category === "User") {
-    iconSvg = ICON_USER;
-  } else if (o.category === "Site") {
-    iconSvg = ICON_SITE;
-  } else if (o.category === "Pattern") {
-    iconSvg = ICON_PATTERN;
-  }
+  const iconSvg = CATEGORY_ICONS[o.category] || "";
 
   return el(
     "div",

@@ -177,53 +177,86 @@ const useTokenEventListeners = ( contentRef, refs ) => {
 
 // ── ExpressionSuggestions ────────────────────────────────────────────────────
 
-/** Curated complex-expression patterns shown when the user picks the Patterns root. */
-const VE_PATTERNS_DEFAULT = [
-	{ expr: "post.title | default 'Untitled'",                   label: 'Post title with fallback' },
-	{ expr: "user.is_logged_in ? user.name : 'Guest'",           label: 'Greeting (logged in)' },
-	{ expr: "post.date | date 'F j, Y'",                         label: 'Formatted publish date' },
-	{ expr: "post.meta.your_field | default ''",                  label: 'Custom field value' },
-	{ expr: 'site.name | upper',                                  label: 'Site name — uppercase' },
-	{ expr: "user.name | default 'Friend'",                      label: 'Display name with fallback' },
-	{ expr: 'post.author_name',                                   label: 'Post author name' },
-	{ expr: 'post.excerpt | default post.content',               label: 'Excerpt or full content' },
-];
+const config = window.vectarrEditorConfig || {};
 
 /**
- * Returns the curated pattern list, filterable by extensions.
+ * Returns the pattern list from PHP-localized data, filterable by extensions.
  * Filter: `vectorExpressions.suggestions.patterns`
+ *
+ * Deduplicates by `expr` to prevent multiple sources from creating duplicates.
  */
 const getPatterns = () => {
+	const patterns = ( config.patterns || [] ).map( ( p ) => ( {
+		expr:     p.expr,
+		label:    p.label,
+		category: p.category || null,
+	} ) );
 	const { applyFilters } = window.wp.hooks;
-	return applyFilters
-		? applyFilters( 'vectorExpressions.suggestions.patterns', VE_PATTERNS_DEFAULT )
-		: VE_PATTERNS_DEFAULT;
+	const raw = applyFilters
+		? applyFilters( 'vectorExpressions.suggestions.patterns', patterns )
+		: patterns;
+
+	// Deduplicate — first occurrence wins.
+	const seen = new Set();
+	return raw.filter( ( p ) => {
+		if ( seen.has( p.expr ) ) return false;
+		seen.add( p.expr );
+		return true;
+	} );
 };
 
 /**
  * Build accordion categories dynamically from the completions list.
  * Each unique `category` value in the completions becomes a section.
- * The Patterns category is appended at the end.
+ * Patterns are distributed into their matching root categories.
  *
  * The final list is filterable via `vectorExpressions.suggestions.categories`
  * so extensions can add/reorder/remove sections.
  */
 const getCategories = ( completions ) => {
 	// Collect unique categories from completions (preserving insertion order).
-	// Skip "Pattern" — it has a dedicated section via getPatterns().
+	// Skip "Pattern" — patterns are handled separately below.
+	// Use composite keys (group:label) to prevent name collisions across groups.
 	const seen = new Map();
 	for ( const item of completions ) {
 		const cat = item.category;
 		if ( ! cat || cat === 'Pattern' ) continue;
+		const group = item.group || '';
+		const compositeKey = group ? `${ group }:${ cat.toLowerCase() }` : cat.toLowerCase();
 		if ( ! seen.has( cat ) ) {
-			seen.set( cat, { key: cat.toLowerCase(), label: cat, items: [] } );
+			seen.set( cat, { key: compositeKey, label: cat, items: [] } );
 		}
 		seen.get( cat ).items.push( item );
 	}
 
-	// Append patterns as a dedicated category at the end.
-	const cats = [ ...seen.values() ];
-	cats.push( { key: 'pattern', label: __( 'Patterns', 'vector-expressions' ), items: getPatterns() } );
+	// Create pattern sub-categories grouped by expression root or explicit category.
+	const patterns = getPatterns();
+	const patternBuckets = new Map();
+	// Derive root-id → label map from PHP-localized data.
+	const rootMap = ( config.roots || [] ).reduce( ( m, r ) => ( { ...m, [ r.id ]: r.label } ), {} );
+	for ( const p of patterns ) {
+		// Patterns with an explicit category (e.g. "WC Pattern") keep it as-is.
+		if ( p.category ) {
+			const catLabel = p.category;
+			if ( ! patternBuckets.has( catLabel ) ) {
+				patternBuckets.set( catLabel, { key: catLabel.toLowerCase().replace( /\s+/g, '-' ), label: catLabel, items: [] } );
+			}
+			patternBuckets.get( catLabel ).items.push( p );
+			continue;
+		}
+		// Otherwise, distribute by expression root.
+		const root = ( p.expr || '' ).split( '.' )[ 0 ]?.toLowerCase();
+		const catLabel = rootMap[ root ];
+		if ( catLabel ) {
+			const bucketLabel = catLabel + ' Patterns';
+			if ( ! patternBuckets.has( bucketLabel ) ) {
+				patternBuckets.set( bucketLabel, { key: bucketLabel.toLowerCase().replace( /\s+/g, '-' ), label: bucketLabel, items: [] } );
+			}
+			patternBuckets.get( bucketLabel ).items.push( { ...p, category: bucketLabel } );
+		}
+	}
+
+	const cats = [ ...seen.values(), ...patternBuckets.values() ];
 
 	const { applyFilters } = window.wp.hooks;
 	return applyFilters
@@ -233,37 +266,65 @@ const getCategories = ( completions ) => {
 
 /**
  * Accordion + search-filter suggestion list.
- * Categories are collapsible. When search is active, all expand to reveal matches.
+ *
+ * Supports two rendering modes:
+ *  - Flat:    entries with `items` array → single-level accordion (free plugin default)
+ *  - Grouped: entries with `categories` array → two-level group → sub-category accordion
+ *
+ * Pro can transform flat categories into grouped ones via the
+ * `vectorExpressions.suggestions.categories` filter.
+ *
  * Exported so the sidebar Expression tab can reuse it.
  */
 export const ExpressionSuggestions = ( { expr, onSelect } ) => {
-	const [ search, setSearch ]   = useState( '' );
-	const [ open, setOpen ]       = useState( {} );
+	const [ search, setSearch ]       = useState( '' );
+	const [ open, setOpen ]           = useState( {} );
+	const [ activeFilter, setFilter ] = useState( null );
+	const suggestionsRef              = useRef( null );
 	const completions             = getCompletions();
 	const categories              = getCategories( completions );
 
-	const query     = search.toLowerCase().trim();
+	const rawQuery  = search.trim();
+	const query     = rawQuery.toLowerCase();
 	const searching = query.length > 0;
+
+	const searchTokens = query.split( /\s+/ ).filter( Boolean );
+
+	/** Check if search tokens match a heading label (group or category name). */
+	const headingMatches = ( label ) => {
+		if ( ! searching || ! label ) return false;
+		const h = label.toLowerCase();
+		return searchTokens.every( ( t ) => h.includes( t ) );
+	};
 
 	const toggle = ( key ) => {
 		setOpen( ( prev ) => ( { ...prev, [ key ]: ! prev[ key ] } ) );
 	};
 
-	const filterItems = ( items ) => {
-		if ( ! searching ) return items;
-		return items.filter( ( s ) =>
-			( s.expr || '' ).toLowerCase().includes( query ) ||
-			( s.label || '' ).toLowerCase().includes( query )
-		);
+	/** Exclusive filter toggle — click to filter, re-click to deselect. */
+	const toggleFilter = ( key ) => {
+		setFilter( ( prev ) => prev === key ? null : key );
+	};
+
+	/** Tokenized matching — all tokens must appear across expr + label + hint.
+	 *  If parentMatch is true, the parent heading already matched → show all items. */
+	const filterItems = ( items, parentMatch = false ) => {
+		if ( ! searching || parentMatch ) return items;
+		return items.filter( ( s ) => {
+			const haystack = [ s.expr, s.label, s.hint, s.category ]
+				.filter( Boolean )
+				.join( ' ' )
+				.toLowerCase();
+			return searchTokens.every( ( token ) => haystack.includes( token ) );
+		} );
 	};
 
 	const handleSelect = ( s ) => {
-		const isPattern = ! ( 'category' in s ) && ! ( 'prefix' in s );
 		const insertExpr = s.expr;
 
 		let newValue = insertExpr;
 
-		if ( s.category === 'Modifier' ) {
+		if ( s.category?.endsWith( 'Modifier' ) ) {
 			let appended = expr.trim();
 			if ( ! appended.endsWith( '|' ) && appended.length > 0 ) {
 				appended += ' ';
@@ -274,54 +335,297 @@ export const ExpressionSuggestions = ( { expr, onSelect } ) => {
 		onSelect( newValue );
 	};
 
+	/** Strip "Category: " prefix from chip labels — the accordion header provides context. */
+	const chipLabel = ( s ) => {
+		const raw = s.label || s.expr;
+		if ( s.category ) {
+			const prefix = s.category + ': ';
+			if ( raw.startsWith( prefix ) ) return raw.slice( prefix.length );
+		}
+		return raw;
+	};
+
+	/** Render a single category accordion (flat entry with `items`). */
+	const renderCategory = ( cat, indented = false, parentMatch = false ) => {
+		const catMatch = headingMatches( cat.label );
+		const filtered = filterItems( cat.items || [], catMatch || parentMatch );
+		if ( searching && filtered.length === 0 && ! catMatch ) return null;
+
+		const isOpen  = searching || !! activeFilter || !! open[ cat.key ];
+		const classes = 'vectarr-suggestions-group' + ( indented ? ' vectarr-suggestions-group--nested' : '' );
+
+		return (
+			<div key={ cat.key } className={ classes }>
+				<button
+					className={ 'vectarr-suggestions-header' + ( isOpen ? ' is-open' : '' ) + ( indented ? ' vectarr-suggestions-header--sub' : '' ) }
+					onClick={ () => ! searching && toggle( cat.key ) }
+					aria-expanded={ isOpen }
+				>
+					{ cat.accent && <span className={ 'vectarr-suggestions-accent vectarr-suggestions-accent--' + cat.accent } /> }
+					<span>{ cat.label }</span>
+					<span className="vectarr-suggestions-count">{ filtered.length }</span>
+					{ ! searching && <span className="vectarr-suggestions-arrow">{ isOpen ? '▲' : '▼' }</span> }
+				</button>
+				{ isOpen && (
+					<div className="vectarr-suggestions-items">
+						{ filtered.map( ( s ) => (
+							<Button
+								key={ s.expr + ( s.label || '' ) }
+								variant="secondary"
+								size="small"
+								className="vectarr-suggestion-chip"
+								onMouseDown={ ( e ) => e.preventDefault() }
+								onClick={ () => handleSelect( s ) }
+							>
+								{ chipLabel( s ) }
+							</Button>
+						) ) }
+					</div>
+				) }
+			</div>
+		);
+	};
+
+	/** Render a group heading with nested sub-categories. */
+	const renderGroup = ( group ) => {
+		// Count total visible items across all sub-categories.
+		const groupMatch = headingMatches( group.label );
+		let totalVisible = 0;
+		const visibleCats = ( group.categories || [] ).filter( ( cat ) => {
+			const catMatch = headingMatches( cat.label );
+			const filtered = filterItems( cat.items || [], groupMatch || catMatch );
+			totalVisible += filtered.length;
+			return ! searching || filtered.length > 0 || catMatch;
+		} );
+
+		if ( visibleCats.length === 0 ) return null;
+
+		const isOpen = searching || !! activeFilter || !! open[ group.key ];
+
+		return (
+			<div key={ group.key } className="vectarr-suggestions-group vectarr-suggestions-group--parent" data-group-key={ group.key }>
+				<button
+					className={ 'vectarr-suggestions-header vectarr-suggestions-header--group' + ( isOpen ? ' is-open' : '' ) }
+					onClick={ () => ! searching && toggle( group.key ) }
+					aria-expanded={ isOpen }
+				>
+					{ group.icon && <span className="vectarr-suggestions-group-icon" dangerouslySetInnerHTML={ { __html: group.icon } } /> }
+					<span>{ group.label }</span>
+					<span className="vectarr-suggestions-count">{ totalVisible }</span>
+					{ ! searching && <span className="vectarr-suggestions-arrow">{ isOpen ? '▲' : '▼' }</span> }
+				</button>
+				{ isOpen && (
+					<div className="vectarr-suggestions-group-body">
+						{ visibleCats.map( ( cat ) => renderCategory( cat, true, groupMatch ) ) }
+					</div>
+				) }
+			</div>
+		);
+	};
+
 	return (
-		<div className="vectarr-suggestions">
-			<div className="vectarr-suggestions-search">
-				<input
-					type="text"
-					className="components-text-control__input"
-					placeholder={ __( 'Filter suggestions…', 'vector-expressions' ) }
-					value={ search }
-					onChange={ ( e ) => setSearch( e.target.value ) }
-				/>
+		<div className="vectarr-suggestions" ref={ suggestionsRef }>
+			{ /* Discovery Section — clear boundary between writing and browsing */ }
+			<div className="vectarr-discovery-header">
+				<span className="vectarr-discovery-label">{ __( 'Browse Data & Filters', 'vector-expressions' ) }</span>
+				<div className="vectarr-discovery-search">
+					<svg className="vectarr-discovery-search-icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M14 14l4 4" /></svg>
+					<input
+						type="text"
+						placeholder={ __( 'Filter suggestions…', 'vector-expressions' ) }
+						value={ search }
+						onChange={ ( e ) => setSearch( e.target.value ) }
+					/>
+				</div>
 			</div>
 
-			{ categories.map( ( cat ) => {
-				const filtered = filterItems( cat.items );
-				if ( searching && filtered.length === 0 ) return null;
+			{ /* Root Strip — category filter below search, above results */ }
+			{ categories.some( ( e ) => e.categories ) && (
+				<div className="vectarr-root-strip" role="navigation" aria-label={ __( 'Filter by group', 'vector-expressions' ) }>
+					{ categories
+						.filter( ( e ) => e.categories )
+						.map( ( group ) => (
+							<button
+								key={ group.key }
+								className={ 'vectarr-root-strip-btn' + ( activeFilter === group.key ? ' is-active' : '' ) }
+								onClick={ () => toggleFilter( group.key ) }
+								title={ group.label }
+								aria-label={ group.label }
+							>
+								{ group.icon
+									? <span dangerouslySetInnerHTML={ { __html: group.icon } } />
+									: <span>{ group.label.charAt( 0 ) }</span>
+								}
+							</button>
+						) )
+					}
+				</div>
+			) }
 
-				const isOpen = searching || !! open[ cat.key ];
 
-				return (
-					<div key={ cat.key } className="vectarr-suggestions-group">
-						<button
-							className={ 'vectarr-suggestions-header' + ( isOpen ? ' is-open' : '' ) }
-							onClick={ () => ! searching && toggle( cat.key ) }
-							aria-expanded={ isOpen }
-						>
-							<span>{ cat.label }</span>
-							<span className="vectarr-suggestions-count">{ filtered.length }</span>
-							{ ! searching && <span className="vectarr-suggestions-arrow">{ isOpen ? '▲' : '▼' }</span> }
-						</button>
-						{ isOpen && (
-							<div className="vectarr-suggestions-items">
-								{ filtered.map( ( s ) => (
+			{ categories
+				.filter( ( entry ) => ! activeFilter || entry.key === activeFilter )
+				.map( ( entry ) =>
+					entry.categories
+						? renderGroup( entry )
+						: renderCategory( entry )
+				)
+			}
+
+			{ /* Quick Start — contextual based on current expression */ }
+			{ ! searching && ! activeFilter && Object.keys( open ).every( ( k ) => ! open[ k ] ) && ( () => {
+				const trimmed = ( expr || '' ).trim();
+				const root = trimmed.split( '.' )[ 0 ]?.toLowerCase();
+				const hasPipe = trimmed.includes( '|' );
+				const hasTernary = trimmed.includes( '?' );
+
+				// When expression is empty → show popular starters.
+				if ( ! trimmed ) {
+					const quickstartItems = ( config.quickstart || [] ).map( ( qs ) => ( {
+						expr:  qs.expr,
+						label: qs.label,
+					} ) );
+
+					if ( quickstartItems.length === 0 ) return null;
+
+					return (
+						<div className="vectarr-suggestions-quickstart">
+							<span className="vectarr-suggestions-quickstart-label">{ __( 'Quick Start', 'vector-expressions' ) }</span>
+							<div className="vectarr-suggestions-quickstart-items">
+								{ quickstartItems.map( ( qs ) => (
 									<Button
-										key={ s.expr + ( s.label || '' ) }
+										key={ qs.expr }
 										variant="secondary"
 										size="small"
-										className="vectarr-suggestion-chip"
+										className="vectarr-suggestion-chip vectarr-suggestion-chip--quickstart"
 										onMouseDown={ ( e ) => e.preventDefault() }
-										onClick={ () => handleSelect( s ) }
+										onClick={ () => handleSelect( qs ) }
 									>
-										{ ( s.label || s.expr ).replace( /^(Post|User|Site|Modifier):\s*/, '' ) }
+										{ qs.label }
 									</Button>
 								) ) }
 							</div>
-						) }
+						</div>
+					);
+				}
+
+				// Ternary expressions → no modifier suggestions (result is already resolved).
+				if ( hasTernary && ! hasPipe ) {
+					return null;
+				}
+
+				// ── Property-level intelligence ──────────────────────────────
+				// Extract property from "root.property" or "root.property | ..."
+				const dotParts = trimmed.split( /\s*\|/ )[ 0 ].trim().split( '.' );
+				const property = dotParts.length > 1 ? dotParts.slice( 1 ).join( '.' ).toLowerCase() : '';
+
+				// Build property-type index from PHP-localized root data.
+				// Each root declares `type` per property (date, html, array, image, price).
+				const propType = ( () => {
+					for ( const r of config.roots || [] ) {
+						if ( r.id !== root ) continue;
+						for ( const p of r.properties || [] ) {
+							if ( p.key === property ) return p.type || 'string';
+						}
+					}
+					return 'string';
+				} )();
+
+				const isDate  = propType === 'date';
+				const isImage = propType === 'image';
+				const isHTML  = propType === 'html';
+				const isArray = propType === 'array';
+				const isPrice = propType === 'price';
+
+				// Collect already-applied modifier names for deduplication.
+				const appliedMods = new Set(
+					( trimmed.match( /\|\s*(\w+)/g ) || [] ).map( ( m ) => m.replace( /\|\s*/, '' ).toLowerCase() )
+				);
+
+				// ── Modifier relevance scoring ──────────────────────────────
+				const contextLabel = hasPipe
+					? __( 'Add Another Modifier', 'vector-expressions' )
+					: __( 'Try a Modifier', 'vector-expressions' );
+
+				/** Score a modifier for relevance (higher = shown first). */
+				const scoreModifier = ( c ) => {
+					const modName = ( c.expr || '' ).replace( /^\|\s*/, '' ).split( /\s/ )[ 0 ].toLowerCase();
+
+					// Already applied → exclude.
+					if ( appliedMods.has( modName ) ) return -1;
+
+					// Property-aware boosting.
+					if ( isDate && modName === 'date' ) return 100;
+					if ( isImage && ( modName === 'thumbnail' || modName === 'mb_image' ) ) return 100;
+					if ( isHTML && [ 'strip_tags', 'wp_excerpt', 'word_count', 'reading_time', 'nl2br', 'raw' ].includes( modName ) ) return 90;
+					if ( isArray && [ 'join', 'count', 'first', 'last', 'sort', 'reverse', 'pluck' ].includes( modName ) ) return 90;
+					if ( isPrice && modName === 'wc_price' ) return 100;
+
+					// Root-specific integration modifiers (always relevant if root matches).
+					if ( root === 'acf' && c.category === 'ACF Modifier' ) return 50;
+					if ( [ 'mb', 'mb_setting', 'mb_user', 'mb_term' ].includes( root ) && c.category === 'MB Modifier' ) return 50;
+					if ( [ 'woo_product', 'woo_shop', 'woo_cart' ].includes( root ) && c.category === 'WC Modifier' ) return 50;
+
+					// Universal modifiers (Modifier + WP Modifier) — contextual filtering.
+					if ( c.category === 'Modifier' || c.category === 'WP Modifier' ) {
+						// Post-only modifiers.
+						if ( [ 'get_user', 'get_post' ].includes( modName ) && root !== 'post' ) return -1;
+						// Taxonomy modifiers.
+						if ( [ 'terms', 'categories', 'tags' ].includes( modName ) && root !== 'post' ) return -1;
+						// Date modifier suppressed if not date property.
+						if ( modName === 'date' && ! isDate ) return 5;
+						// Array modifiers suppressed if not array property.
+						if ( [ 'sort', 'reverse', 'first', 'last', 'pluck' ].includes( modName ) && ! isArray ) return 3;
+						// HTML/content modifiers suppressed if not HTML property.
+						if ( [ 'strip_tags', 'nl2br', 'wp_excerpt', 'word_count', 'reading_time' ].includes( modName ) && ! isHTML ) return 3;
+						// Image modifier suppressed if not image property.
+						if ( modName === 'thumbnail' && ! isImage ) return 3;
+						// Always-useful universal modifiers.
+						if ( [ 'upper', 'lower', 'default', 'if', 'match', 'esc_html', 'count' ].includes( modName ) ) return 40;
+						return 20;
+					}
+
+					return -1;
+				};
+
+				// Score, filter, and sort modifiers.
+				const scored = completions
+					.filter( ( c ) => c.category && c.category.endsWith( 'Modifier' ) )
+					.map( ( c ) => ( { ...c, _score: scoreModifier( c ) } ) )
+					.filter( ( c ) => c._score > 0 )
+					.sort( ( a, b ) => b._score - a._score );
+
+				// Relevant patterns: those that use the same root.
+				const rootPatterns = completions.filter( ( c ) =>
+					c.category === 'Pattern' &&
+					( c.expr || '' ).toLowerCase().startsWith( root + '.' )
+				);
+
+				const suggestions = [ ...scored.slice( 0, 6 ), ...rootPatterns.slice( 0, 2 ) ];
+
+				if ( suggestions.length === 0 ) return null;
+
+				return (
+					<div className="vectarr-suggestions-quickstart">
+						<span className="vectarr-suggestions-quickstart-label">{ contextLabel }</span>
+						<div className="vectarr-suggestions-quickstart-items">
+							{ suggestions.map( ( s ) => (
+								<Button
+									key={ s.expr + ( s.label || '' ) }
+									variant="secondary"
+									size="small"
+									className="vectarr-suggestion-chip vectarr-suggestion-chip--quickstart"
+									onMouseDown={ ( e ) => e.preventDefault() }
+									onClick={ () => handleSelect( s ) }
+									title={ s.expr }
+								>
+									{ chipLabel( s ) }
+								</Button>
+							) ) }
+						</div>
 					</div>
 				);
-			} ) }
+			} )() }
 		</div>
 	);
 };

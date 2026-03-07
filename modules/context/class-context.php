@@ -69,35 +69,11 @@ class Context {
 	 * @return mixed The resolved data object, or null if unrecognized.
 	 */
 	public function get( string $root ): mixed {
-		switch ( $root ) {
-			case 'user':
-				return wp_get_current_user();
-
-			case 'post':
-				return get_post();
-
-			case 'site':
-				/**
-				 * Filters the global 'site' context data object.
-				 *
-				 * @param array<string, string> $site_data The default site data (name, url, description, language).
-				 */
-				return (object) apply_filters(
-					'vector_expressions/context/site',
-					[
-						'name'        => get_bloginfo( 'name' ),
-						'description' => get_bloginfo( 'description' ),
-						'url'         => home_url(),
-						'language'    => get_bloginfo( 'language' ),
-					]
-				);
-		}
-
 		/**
-		 * Filters the resolved value for an unrecognized context root.
+		 * Filters the resolved value for a context root variable.
 		 *
-		 * Allows Pro extensions or third-party code to introduce new root
-		 * variables (e.g. 'acf', 'woo', 'membership').
+		 * Root subclasses (PostRoot, UserRoot, SiteRoot, and any Pro/third-party
+		 * roots) hook into this filter to handle their respective root names.
 		 *
 		 * @param mixed  $value The current resolved value (default null).
 		 * @param string $root  The root variable name requested.
@@ -205,6 +181,12 @@ class Context {
 			/**
 			 * Filters the allowed mapping properties for WP_User objects.
 			 *
+			 * SECURITY: `email` (user_email) and `login` (user_login) are gated
+			 * behind is_user_logged_in(). The `user` root resolves to the *current
+			 * visitor's* WP_User object — these properties expose PII that should
+			 * only be accessible when the viewer is authenticated (e.g. a user
+			 * dashboard showing the visitor their own email address).
+			 *
 			 * @param array<string, string> $allowed Expression key to WP_User property mappings.
 			 */
 			$allowed = apply_filters(
@@ -219,7 +201,16 @@ class Context {
 					'roles'      => 'roles',
 				]
 			);
-			return $allowed[ $key ] ?? null;
+
+			$resolved = $allowed[ $key ] ?? null;
+
+			// Gate PII properties behind authentication — only the logged-in
+			// visitor's own data is exposed, never for anonymous visitors.
+			if ( in_array( $resolved, [ 'user_email', 'user_login' ], true ) && ! is_user_logged_in() ) {
+				return null;
+			}
+
+			return $resolved;
 		}
 
 		return $key;
