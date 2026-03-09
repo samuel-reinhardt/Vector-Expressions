@@ -24,9 +24,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'VECTARR_VERSION', '1.0.2' );
-define( 'VECTARR_PATH', plugin_dir_path( __FILE__ ) );
-define( 'VECTARR_URL', plugin_dir_url( __FILE__ ) );
+define( 'VECTEX_VERSION', '1.0.2' );
+define( 'VECTEX_PATH', plugin_dir_path( __FILE__ ) );
+define( 'VECTEX_URL', plugin_dir_url( __FILE__ ) );
 
 /**
  * Return a cache-busting version string for an asset file.
@@ -38,32 +38,32 @@ define( 'VECTARR_URL', plugin_dir_url( __FILE__ ) );
  * @param string $path Absolute filesystem path to the asset file.
  * @return string Version string.
  */
-function vectarr_asset_version( string $path ): string {
+function vectex_asset_version( string $path ): string {
 	if ( defined( 'WP_DEBUG' ) && WP_DEBUG && file_exists( $path ) ) {
 		return (string) filemtime( $path );
 	}
-	return VECTARR_VERSION;
+	return VECTEX_VERSION;
 }
 
 // Autoload module class files.
-require_once VECTARR_PATH . 'modules/base/class-root.php';
-require_once VECTARR_PATH . 'modules/base/class-modifier.php';
-require_once VECTARR_PATH . 'modules/base/class-modifier-set.php';
-require_once VECTARR_PATH . 'modules/base/functions.php';
-require_once VECTARR_PATH . 'modules/base/class-post-root.php';
-require_once VECTARR_PATH . 'modules/base/class-user-root.php';
-require_once VECTARR_PATH . 'modules/base/class-site-root.php';
-require_once VECTARR_PATH . 'modules/base/class-core-modifiers.php';
-require_once VECTARR_PATH . 'modules/parser/class-safe-string.php';
-require_once VECTARR_PATH . 'modules/context/class-object-proxy.php';
-require_once VECTARR_PATH . 'modules/context/class-context.php';
-require_once VECTARR_PATH . 'modules/library/class-library.php';
-require_once VECTARR_PATH . 'modules/parser/class-parser.php';
+require_once VECTEX_PATH . 'modules/base/class-root.php';
+require_once VECTEX_PATH . 'modules/base/class-modifier.php';
+require_once VECTEX_PATH . 'modules/base/class-modifier-set.php';
+require_once VECTEX_PATH . 'modules/base/functions.php';
+require_once VECTEX_PATH . 'modules/base/class-post-root.php';
+require_once VECTEX_PATH . 'modules/base/class-user-root.php';
+require_once VECTEX_PATH . 'modules/base/class-site-root.php';
+require_once VECTEX_PATH . 'modules/base/class-core-modifiers.php';
+require_once VECTEX_PATH . 'modules/parser/class-safe-string.php';
+require_once VECTEX_PATH . 'modules/context/class-object-proxy.php';
+require_once VECTEX_PATH . 'modules/context/class-context.php';
+require_once VECTEX_PATH . 'modules/library/class-library.php';
+require_once VECTEX_PATH . 'modules/parser/class-parser.php';
 
 /**
  * Main plugin bootstrap class.
  *
- * Registers the `vectarr_logic` block attribute on all blocks, processes block
+ * Registers the `vectex_logic` block attribute on all blocks, processes block
  * output through the expression parser, and enqueues editor assets.
  *
  * @package VectorExpressions
@@ -121,11 +121,11 @@ final class VectorExpressions {
 	 * @return string[] Modified links array.
 	 */
 	public function plugin_row_meta( array $links, string $file ): array {
-		if ( plugin_basename( VECTARR_PATH . 'vector-expressions.php' ) !== $file ) {
+		if ( plugin_basename( VECTEX_PATH . 'vector-expressions.php' ) !== $file ) {
 			return $links;
 		}
 
-		$logo_url = esc_url( VECTARR_URL . 'logo.svg' );
+		$logo_url = esc_url( VECTEX_URL . 'logo.svg' );
 		$logo_img = '<img src="' . $logo_url . '" width="14" height="11" alt="" aria-hidden="true" style="vertical-align:middle;margin-right:3px;">';
 
 		$links[] = $logo_img . '<a href="https://vectorarrow.com/" target="_blank" rel="noopener">'
@@ -136,7 +136,7 @@ final class VectorExpressions {
 	}
 
 	/**
-	 * Whitelist the `data-vectarr-expr` attribute on `<span>` tags so wp_kses_post
+	 * Whitelist the `data-vectex-expr` attribute on `<span>` tags so wp_kses_post
 	 * does not strip expression data when a post is saved via the REST API.
 	 *
 	 * @param array<string, array<string, bool>> $allowed  Allowed tags + attributes.
@@ -149,8 +149,8 @@ final class VectorExpressions {
 				$allowed['span'] ?? [],
 				[
 					'class'           => true,
-					'data-vectarr-expr'    => true,
-					'data-vectarr-view'    => true,
+					'data-vectex-expr'    => true,
+					'data-vectex-view'    => true,
 					'contenteditable' => true,
 				]
 			);
@@ -258,7 +258,7 @@ final class VectorExpressions {
 	}
 
 	/**
-	 * Inject the `vectarr_logic` attribute schema into every registered block type.
+	 * Inject the `vectex_logic` attribute schema into every registered block type.
 	 *
 	 * Runs on `init` so all blocks are already registered.
 	 *
@@ -268,7 +268,7 @@ final class VectorExpressions {
 		$registry = \WP_Block_Type_Registry::get_instance();
 
 		/**
-		 * Filters the default vectarr_logic attribute schema before it is applied.
+		 * Filters the default vectex_logic attribute schema before it is applied.
 		 *
 		 * @param array<string, mixed> $schema The default attribute schema.
 		 */
@@ -285,8 +285,8 @@ final class VectorExpressions {
 		);
 
 		foreach ( $registry->get_all_registered() as $block_type ) {
-			if ( ! isset( $block_type->attributes['vectarr_logic'] ) ) {
-				$block_type->attributes['vectarr_logic'] = $schema;
+			if ( ! isset( $block_type->attributes['vectex_logic'] ) ) {
+				$block_type->attributes['vectex_logic'] = $schema;
 			}
 
 			// FORCE INJECTION: Guarantee every block receives postId from Query Loops.
@@ -337,19 +337,19 @@ final class VectorExpressions {
 			return $block_content;
 		}
 
-		// Editor context: hydrate expression spans with data-vectarr-view instead of
+		// Editor context: hydrate expression spans with data-vectex-view instead of
 		// running the full template parser (which would replace spans with text).
 		if ( $this->is_editor_context() ) {
 			return $this->hydrate_editor_previews( $block_content );
 		}
 
 		// Fast path: no logic or empty block.
-		if ( empty( $block['attrs']['vectarr_logic'] ) || '' === trim( $block_content ) ) {
+		if ( empty( $block['attrs']['vectex_logic'] ) || '' === trim( $block_content ) ) {
 			// All expression tokens are escaped inside parse() — see class-parser.php.
 			return $this->parser->parse( $block_content );
 		}
 
-		$logic        = $block['attrs']['vectarr_logic'];
+		$logic        = $block['attrs']['vectex_logic'];
 		$instructions = [
 			'render' => true,
 			'class'  => [],
@@ -386,7 +386,7 @@ final class VectorExpressions {
 		 * the $instructions array.
 		 *
 		 * @param array<string, mixed> $instructions The current render instructions.
-		 * @param array<string, mixed> $logic        The raw vectarr_logic attribute data.
+		 * @param array<string, mixed> $logic        The raw vectex_logic attribute data.
 		 * @param Parser            $parser       The active parser instance.
 		 */
 		$instructions = apply_filters( 'vector_expressions/renderer/calculate_logic', $instructions, $logic, $this->parser );
@@ -525,19 +525,19 @@ final class VectorExpressions {
 	 * Hydrate expression token spans with evaluated preview values.
 	 *
 	 * Runs in the editor context instead of `parser->parse()` so that
-	 * `<span class="vectarr-expr-token" data-vectarr-expr="...">` elements are
-	 * preserved (not replaced with text), and `data-vectarr-view` is set
+	 * `<span class="vectex-expr-token" data-vectex-expr="...">` elements are
+	 * preserved (not replaced with text), and `data-vectex-view` is set
 	 * to the server-evaluated result for CSS `::before` rendering.
 	 *
-	 * Also strips stale editor-only attributes (`data-vectarr-speculative`,
-	 * `data-vectarr-empty`, `data-vectarr-active`) that may have been persisted
+	 * Also strips stale editor-only attributes (`data-vectex-speculative`,
+	 * `data-vectex-empty`, `data-vectex-active`) that may have been persisted
 	 * by older versions.
 	 *
 	 * @param string $html Block HTML content.
-	 * @return string Hydrated HTML with data-vectarr-view attributes set.
+	 * @return string Hydrated HTML with data-vectex-view attributes set.
 	 */
 	private function hydrate_editor_previews( string $html ): string {
-		if ( ! str_contains( $html, 'vectarr-expr-token' ) ) {
+		if ( ! str_contains( $html, 'vectex-expr-token' ) ) {
 			return $html;
 		}
 
@@ -547,8 +547,8 @@ final class VectorExpressions {
 		try {
 			$tags = new \WP_HTML_Tag_Processor( $html );
 
-			while ( $tags->next_tag( [ 'tag_name' => 'SPAN', 'class_name' => 'vectarr-expr-token' ] ) ) {
-				$expr = $tags->get_attribute( 'data-vectarr-expr' );
+			while ( $tags->next_tag( [ 'tag_name' => 'SPAN', 'class_name' => 'vectex-expr-token' ] ) ) {
+				$expr = $tags->get_attribute( 'data-vectex-expr' );
 				if ( ! $expr ) {
 					continue;
 				}
@@ -563,18 +563,18 @@ final class VectorExpressions {
 					$view = '';
 				}
 
-				$tags->set_attribute( 'data-vectarr-view', $view );
+				$tags->set_attribute( 'data-vectex-view', $view );
 
 				// Flag empty views so CSS can show a placeholder.
 				if ( '' === trim( str_replace( "\xC2\xA0", '', $view ) ) ) {
-					$tags->set_attribute( 'data-vectarr-empty', '' );
+					$tags->set_attribute( 'data-vectex-empty', '' );
 				} else {
-					$tags->remove_attribute( 'data-vectarr-empty' );
+					$tags->remove_attribute( 'data-vectex-empty' );
 				}
 
 				// Strip stale attributes from older saves.
-				$tags->remove_attribute( 'data-vectarr-speculative' );
-				$tags->remove_attribute( 'data-vectarr-active' );
+				$tags->remove_attribute( 'data-vectex-speculative' );
+				$tags->remove_attribute( 'data-vectex-active' );
 			}
 
 			return $tags->get_updated_html();
@@ -586,7 +586,7 @@ final class VectorExpressions {
 	/**
 	 * Strip HTML tags and decode entities for editor preview display.
 	 *
-	 * Preview values are rendered via CSS `content: attr(data-vectarr-view)`,
+	 * Preview values are rendered via CSS `content: attr(data-vectex-view)`,
 	 * which treats its input as plain text. Any HTML tags or encoded
 	 * entities would appear literally, so we strip them here.
 	 *
@@ -628,14 +628,14 @@ final class VectorExpressions {
 	 */
 	public function enqueue_assets(): void {
 		wp_enqueue_script(
-			'vectarr-editor',
-			VECTARR_URL . 'dist/editor.js',
+			'vectex-editor',
+			VECTEX_URL . 'dist/editor.js',
 			[ 'wp-blocks', 'wp-element', 'wp-components', 'wp-data', 'wp-i18n', 'wp-compose', 'wp-block-editor', 'wp-rich-text', 'wp-hooks', 'wp-plugins', 'wp-editor', 'wp-edit-post' ],
-			vectarr_asset_version( VECTARR_PATH . 'dist/editor.js' ),
+			vectex_asset_version( VECTEX_PATH . 'dist/editor.js' ),
 			true
 		);
 
-		wp_set_script_translations( 'vectarr-editor', 'vector-expressions', VECTARR_PATH . 'languages' );
+		wp_set_script_translations( 'vectex-editor', 'vector-expressions', VECTEX_PATH . 'languages' );
 
 		/**
 		 * Filters the context data exposed to the block editor JS.
@@ -683,11 +683,11 @@ final class VectorExpressions {
 			]
 		);
 
-		wp_localize_script( 'vectarr-editor', 'vectarrContext', $context );
+		wp_localize_script( 'vectex-editor', 'vectexContext', $context );
 
 		// Localize root/modifier/pattern definitions from PHP.
 		// These are auto-populated by Root and ModifierSet subclass constructors.
-		wp_localize_script( 'vectarr-editor', 'vectarrEditorConfig', [
+		wp_localize_script( 'vectex-editor', 'vectexEditorConfig', [
 			'roots'      => apply_filters( 'vector_expressions/editor/roots', [] ),
 			'modifiers'  => apply_filters( 'vector_expressions/editor/modifiers', [] ),
 			'patterns'   => apply_filters( 'vector_expressions/editor/patterns', [] ),
@@ -710,10 +710,10 @@ final class VectorExpressions {
 		}
 
 		wp_enqueue_style(
-			'vectarr-editor-css',
-			VECTARR_URL . 'dist/editor.css',
+			'vectex-editor-css',
+			VECTEX_URL . 'dist/editor.css',
 			[],
-			vectarr_asset_version( VECTARR_PATH . 'dist/editor.css' )
+			vectex_asset_version( VECTEX_PATH . 'dist/editor.css' )
 		);
 	}
 }

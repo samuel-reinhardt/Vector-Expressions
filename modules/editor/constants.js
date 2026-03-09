@@ -2,14 +2,14 @@
  * Vector Expressions — Shared editor constants.
  *
  * Derives editor completions and root definitions from PHP-localized data
- * (`window.vectarrEditorConfig`) so PHP remains the single source of truth.
+ * (`window.vectexEditorConfig`) so PHP remains the single source of truth.
  *
  * Falls back to minimal static definitions when localized data is unavailable
  * (e.g. in unit test environments).
  */
 
-const ctx = window.vectarrContext || {};
-const config = window.vectarrEditorConfig || {};
+const ctx = window.vectexContext || {};
+const config = window.vectexEditorConfig || {};
 
 // ── Icons (from PHP) ──────────────────────────────────────────────────────────
 
@@ -181,13 +181,13 @@ export const SKIP_CONVERT_BLOCKS = new Set([
 
 /**
  * Matches:
- *   Group 1 — An already-converted <span class="vectarr-expr-token"> element (skip).
+ *   Group 1 — An already-converted <span class="vectex-expr-token"> element (skip).
  *   Group 2 — A <code> or <pre> block (skip).
  *   Group 3 — A bare {{ expr }} template tag (convert).
  *   Group 4 — The expression inside the {{ }} (capture group within 3).
  */
 export const TOKEN_REGEX =
-  /(<span\b[^>]*\bclass="vectarr-expr-token"[^>]*>[\s\S]*?<\/span>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
+  /(<span\b[^>]*\bclass="vectex-expr-token"[^>]*>[\s\S]*?<\/span>)|(<(?:code|pre)\b[^>]*>[\s\S]*?<\/(?:code|pre)>)|(\{\{\s*([^{}]+?)\s*\}\})/gi;
 
 /** Milliseconds to wait before auto-focusing the popover expression input. */
 export const POPOVER_FOCUS_DELAY = 50;

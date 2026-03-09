@@ -217,6 +217,20 @@ Append a CSS class to the block's root element based on an expression. Strings m
 user.login == "admin" ? "is-admin" : "is-guest"
 ```
 
+
+= Source Code =
+
+The full, uncompressed source code — including all JavaScript and CSS source files — is publicly available on GitHub:
+
+**[github.com/samuel-reinhardt/Vector-Expressions](https://github.com/samuel-reinhardt/Vector-Expressions)**
+
+The distributed `dist/` assets are built from source using Node.js and esbuild. To rebuild:
+
+```bash
+pnpm install
+pnpm build
+```
+
 == Installation ==
 
 1. Upload the plugin files to the `/wp-content/plugins/vector-expressions` directory, or install the plugin through the WordPress plugins screen directly.

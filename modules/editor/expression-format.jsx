@@ -26,7 +26,7 @@ const { select, useSelect, useDispatch }        = window.wp.data;
 const { RichTextToolbarButton }                 = window.wp.blockEditor;
 
 /**
- * Mirrors `data-vectarr-active` on the active token span in sync with
+ * Mirrors `data-vectex-active` on the active token span in sync with
  * Gutenberg's `isActive` prop.
  */
 const useActiveTokenState = ( isActive, contentRef, sidebarActive ) => {
@@ -35,11 +35,11 @@ const useActiveTokenState = ( isActive, contentRef, sidebarActive ) => {
 		if ( ! el ) return;
 
 		if ( isActive ) {
-			const span = el.querySelector( 'span.vectarr-expr-token[data-rich-text-format-boundary]' );
-			if ( span ) span.setAttribute( 'data-vectarr-active', '' );
+			const span = el.querySelector( 'span.vectex-expr-token[data-rich-text-format-boundary]' );
+			if ( span ) span.setAttribute( 'data-vectex-active', '' );
 		} else if ( ! sidebarActive ) {
-			el.querySelectorAll( 'span.vectarr-expr-token' ).forEach( ( m ) => {
-				m.removeAttribute( 'data-vectarr-active' );
+			el.querySelectorAll( 'span.vectex-expr-token' ).forEach( ( m ) => {
+				m.removeAttribute( 'data-vectex-active' );
 				m.removeAttribute( 'data-rich-text-format-boundary' );
 			} );
 		}
@@ -47,12 +47,12 @@ const useActiveTokenState = ( isActive, contentRef, sidebarActive ) => {
 };
 
 /**
- * Walks up the DOM from `n` to find the nearest `span.vectarr-expr-token`, or null.
+ * Walks up the DOM from `n` to find the nearest `span.vectex-expr-token`, or null.
  */
 const getTokenSpan = ( n, el ) => {
 	let cur = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
 	while ( cur && cur !== el ) {
-		if ( cur.tagName === 'SPAN' && cur.classList.contains( 'vectarr-expr-token' ) ) return cur;
+		if ( cur.tagName === 'SPAN' && cur.classList.contains( 'vectex-expr-token' ) ) return cur;
 		cur = cur.parentElement;
 	}
 	return null;
@@ -177,7 +177,7 @@ const useTokenEventListeners = ( contentRef, refs ) => {
 
 // ── ExpressionSuggestions ────────────────────────────────────────────────────
 
-const config = window.vectarrEditorConfig || {};
+const config = window.vectexEditorConfig || {};
 
 /**
  * Returns the pattern list from PHP-localized data, filterable by extensions.
@@ -352,28 +352,28 @@ export const ExpressionSuggestions = ( { expr, onSelect } ) => {
 		if ( searching && filtered.length === 0 && ! catMatch ) return null;
 
 		const isOpen  = searching || !! activeFilter || !! open[ cat.key ];
-		const classes = 'vectarr-suggestions-group' + ( indented ? ' vectarr-suggestions-group--nested' : '' );
+		const classes = 'vectex-suggestions-group' + ( indented ? ' vectex-suggestions-group--nested' : '' );
 
 		return (
 			<div key={ cat.key } className={ classes }>
 				<button
-					className={ 'vectarr-suggestions-header' + ( isOpen ? ' is-open' : '' ) + ( indented ? ' vectarr-suggestions-header--sub' : '' ) }
+					className={ 'vectex-suggestions-header' + ( isOpen ? ' is-open' : '' ) + ( indented ? ' vectex-suggestions-header--sub' : '' ) }
 					onClick={ () => ! searching && toggle( cat.key ) }
 					aria-expanded={ isOpen }
 				>
-					{ cat.accent && <span className={ 'vectarr-suggestions-accent vectarr-suggestions-accent--' + cat.accent } /> }
+					{ cat.accent && <span className={ 'vectex-suggestions-accent vectex-suggestions-accent--' + cat.accent } /> }
 					<span>{ cat.label }</span>
-					<span className="vectarr-suggestions-count">{ filtered.length }</span>
-					{ ! searching && <span className="vectarr-suggestions-arrow">{ isOpen ? '▲' : '▼' }</span> }
+					<span className="vectex-suggestions-count">{ filtered.length }</span>
+					{ ! searching && <span className="vectex-suggestions-arrow">{ isOpen ? '▲' : '▼' }</span> }
 				</button>
 				{ isOpen && (
-					<div className="vectarr-suggestions-items">
+					<div className="vectex-suggestions-items">
 						{ filtered.map( ( s ) => (
 							<Button
 								key={ s.expr + ( s.label || '' ) }
 								variant="secondary"
 								size="small"
-								className="vectarr-suggestion-chip"
+								className="vectex-suggestion-chip"
 								onMouseDown={ ( e ) => e.preventDefault() }
 								onClick={ () => handleSelect( s ) }
 							>
@@ -403,19 +403,19 @@ export const ExpressionSuggestions = ( { expr, onSelect } ) => {
 		const isOpen = searching || !! activeFilter || !! open[ group.key ];
 
 		return (
-			<div key={ group.key } className="vectarr-suggestions-group vectarr-suggestions-group--parent" data-group-key={ group.key }>
+			<div key={ group.key } className="vectex-suggestions-group vectex-suggestions-group--parent" data-group-key={ group.key }>
 				<button
-					className={ 'vectarr-suggestions-header vectarr-suggestions-header--group' + ( isOpen ? ' is-open' : '' ) }
+					className={ 'vectex-suggestions-header vectex-suggestions-header--group' + ( isOpen ? ' is-open' : '' ) }
 					onClick={ () => ! searching && toggle( group.key ) }
 					aria-expanded={ isOpen }
 				>
-					{ group.icon && <span className="vectarr-suggestions-group-icon" dangerouslySetInnerHTML={ { __html: group.icon } } /> }
+					{ group.icon && <span className="vectex-suggestions-group-icon" dangerouslySetInnerHTML={ { __html: group.icon } } /> }
 					<span>{ group.label }</span>
-					<span className="vectarr-suggestions-count">{ totalVisible }</span>
-					{ ! searching && <span className="vectarr-suggestions-arrow">{ isOpen ? '▲' : '▼' }</span> }
+					<span className="vectex-suggestions-count">{ totalVisible }</span>
+					{ ! searching && <span className="vectex-suggestions-arrow">{ isOpen ? '▲' : '▼' }</span> }
 				</button>
 				{ isOpen && (
-					<div className="vectarr-suggestions-group-body">
+					<div className="vectex-suggestions-group-body">
 						{ visibleCats.map( ( cat ) => renderCategory( cat, true, groupMatch ) ) }
 					</div>
 				) }
@@ -424,12 +424,12 @@ export const ExpressionSuggestions = ( { expr, onSelect } ) => {
 	};
 
 	return (
-		<div className="vectarr-suggestions" ref={ suggestionsRef }>
+		<div className="vectex-suggestions" ref={ suggestionsRef }>
 			{ /* Discovery Section — clear boundary between writing and browsing */ }
-			<div className="vectarr-discovery-header">
-				<span className="vectarr-discovery-label">{ __( 'Browse Data & Filters', 'vector-expressions' ) }</span>
-				<div className="vectarr-discovery-search">
-					<svg className="vectarr-discovery-search-icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M14 14l4 4" /></svg>
+			<div className="vectex-discovery-header">
+				<span className="vectex-discovery-label">{ __( 'Browse Data & Filters', 'vector-expressions' ) }</span>
+				<div className="vectex-discovery-search">
+					<svg className="vectex-discovery-search-icon" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M14 14l4 4" /></svg>
 					<input
 						type="text"
 						placeholder={ __( 'Filter suggestions…', 'vector-expressions' ) }
@@ -441,13 +441,13 @@ export const ExpressionSuggestions = ( { expr, onSelect } ) => {
 
 			{ /* Root Strip — category filter below search, above results */ }
 			{ categories.some( ( e ) => e.categories ) && (
-				<div className="vectarr-root-strip" role="navigation" aria-label={ __( 'Filter by group', 'vector-expressions' ) }>
+				<div className="vectex-root-strip" role="navigation" aria-label={ __( 'Filter by group', 'vector-expressions' ) }>
 					{ categories
 						.filter( ( e ) => e.categories )
 						.map( ( group ) => (
 							<button
 								key={ group.key }
-								className={ 'vectarr-root-strip-btn' + ( activeFilter === group.key ? ' is-active' : '' ) }
+								className={ 'vectex-root-strip-btn' + ( activeFilter === group.key ? ' is-active' : '' ) }
 								onClick={ () => toggleFilter( group.key ) }
 								title={ group.label }
 								aria-label={ group.label }
@@ -489,15 +489,15 @@ export const ExpressionSuggestions = ( { expr, onSelect } ) => {
 					if ( quickstartItems.length === 0 ) return null;
 
 					return (
-						<div className="vectarr-suggestions-quickstart">
-							<span className="vectarr-suggestions-quickstart-label">{ __( 'Quick Start', 'vector-expressions' ) }</span>
-							<div className="vectarr-suggestions-quickstart-items">
+						<div className="vectex-suggestions-quickstart">
+							<span className="vectex-suggestions-quickstart-label">{ __( 'Quick Start', 'vector-expressions' ) }</span>
+							<div className="vectex-suggestions-quickstart-items">
 								{ quickstartItems.map( ( qs ) => (
 									<Button
 										key={ qs.expr }
 										variant="secondary"
 										size="small"
-										className="vectarr-suggestion-chip vectarr-suggestion-chip--quickstart"
+										className="vectex-suggestion-chip vectex-suggestion-chip--quickstart"
 										onMouseDown={ ( e ) => e.preventDefault() }
 										onClick={ () => handleSelect( qs ) }
 									>
@@ -606,15 +606,15 @@ export const ExpressionSuggestions = ( { expr, onSelect } ) => {
 				if ( suggestions.length === 0 ) return null;
 
 				return (
-					<div className="vectarr-suggestions-quickstart">
-						<span className="vectarr-suggestions-quickstart-label">{ contextLabel }</span>
-						<div className="vectarr-suggestions-quickstart-items">
+					<div className="vectex-suggestions-quickstart">
+						<span className="vectex-suggestions-quickstart-label">{ contextLabel }</span>
+						<div className="vectex-suggestions-quickstart-items">
 							{ suggestions.map( ( s ) => (
 								<Button
 									key={ s.expr + ( s.label || '' ) }
 									variant="secondary"
 									size="small"
-									className="vectarr-suggestion-chip vectarr-suggestion-chip--quickstart"
+									className="vectex-suggestion-chip vectex-suggestion-chip--quickstart"
 									onMouseDown={ ( e ) => e.preventDefault() }
 									onClick={ () => handleSelect( s ) }
 									title={ s.expr }
@@ -731,7 +731,7 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 	const dismiss = useCallback( () => {
 		storeDispatch.clearActiveToken();
 		const el   = contentRef?.current;
-		const span = el?.querySelector( 'span[data-vectarr-active]' );
+		const span = el?.querySelector( 'span[data-vectex-active]' );
 		if ( el && span ) {
 			const iframeDoc = el.ownerDocument;
 			const range     = iframeDoc.createRange();
@@ -790,10 +790,10 @@ export const registerExpressionFormat = () => {
 	registerFormatType( 'vector/expression', {
 		title:     __( 'Dynamic Value', 'vector-expressions' ),
 		tagName:   'span',
-		className: 'vectarr-expr-token',
+		className: 'vectex-expr-token',
 		attributes: {
-			expr:            'data-vectarr-expr',
-			view:            'data-vectarr-view',
+			expr:            'data-vectex-expr',
+			view:            'data-vectex-view',
 			contentEditable: 'contenteditable',
 		},
 

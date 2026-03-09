@@ -100,10 +100,10 @@ class Parser {
 			);
 		}
 
-		// ---- Step 2b: Process HTML format pills (<span data-vectarr-expr="...">preview</span>) ------
-		if ( str_contains( $template, 'data-vectarr-expr' ) ) {
+		// ---- Step 2b: Process HTML format pills (<span data-vectex-expr="...">preview</span>) ------
+		if ( str_contains( $template, 'data-vectex-expr' ) ) {
 			$template = preg_replace_callback(
-				'/<span\b[^>]*\bdata-vectarr-expr="([^"]+)"[^>]*>.*?<\/span>/is',
+				'/<span\b[^>]*\bdata-vectex-expr="([^"]+)"[^>]*>.*?<\/span>/is',
 				function ( array $m ): string {
 					$expr = html_entity_decode( $m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 					try {
@@ -122,7 +122,7 @@ class Parser {
 						 * @param string    $expr The expression string that failed.
 						 */
 						do_action( 'vector_expressions/error', $e, $expr );
-						return defined( 'WP_DEBUG' ) && WP_DEBUG && ( ! defined( 'WP_DEBUG_DISPLAY' ) || WP_DEBUG_DISPLAY ) ? '<!-- VECTARR Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
+						return defined( 'WP_DEBUG' ) && WP_DEBUG && ( ! defined( 'WP_DEBUG_DISPLAY' ) || WP_DEBUG_DISPLAY ) ? '<!-- VECTEX Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
 					}
 				},
 				$template
@@ -175,7 +175,7 @@ class Parser {
 					 * @param string    $expr The expression string that failed.
 					 */
 					do_action( 'vector_expressions/error', $e, $expr );
-					return defined( 'WP_DEBUG' ) && WP_DEBUG && ( ! defined( 'WP_DEBUG_DISPLAY' ) || WP_DEBUG_DISPLAY ) ? '<!-- VECTARR Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
+					return defined( 'WP_DEBUG' ) && WP_DEBUG && ( ! defined( 'WP_DEBUG_DISPLAY' ) || WP_DEBUG_DISPLAY ) ? '<!-- VECTEX Error: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES, 'UTF-8' ) . ' -->' : '';
 				}
 			},
 			$template

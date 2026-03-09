@@ -44,7 +44,7 @@ const SidebarIcon = () => (
  * Tab icon helper — renders a Dashicon-style SVG with a native tooltip.
  */
 const TabIcon = ( { label, children } ) => (
-	<span className="vectarr-tab-icon" title={ label } aria-label={ label }>
+	<span className="vectex-tab-icon" title={ label } aria-label={ label }>
 		{ children }
 	</span>
 );
@@ -94,13 +94,13 @@ const ExpressionTabContent = () => {
 	const statusColor = ! hasExpr ? '#e0e0e0' : ( isValid ? '#5df4a3' : '#cc1818' );
 
 	return (
-		<div className="vectarr-expression-editor">
+		<div className="vectex-expression-editor">
 			{/* Console Card — input + status bar */}
-			<div className="vectarr-console-card">
-				<div className="vectarr-expr-field">
-					<span className="vectarr-expr-brace" aria-hidden="true">{'{{ '}</span>
+			<div className="vectex-console-card">
+				<div className="vectex-expr-field">
+					<span className="vectex-expr-brace" aria-hidden="true">{'{{ '}</span>
 					<AutoTextarea
-						className="vectarr-expr-input vectarr-class-textarea"
+						className="vectex-expr-input vectex-class-textarea"
 						value={ expr }
 						onChange={ updateExpr }
 						placeholder="user.is_logged_in"
@@ -117,11 +117,11 @@ const ExpressionTabContent = () => {
 							}
 						} }
 					/>
-					<span className="vectarr-expr-brace" aria-hidden="true">{' }}'}</span>
+					<span className="vectex-expr-brace" aria-hidden="true">{' }}'}</span>
 				</div>
-				<div className="vectarr-console-status" style={ { borderTopColor: statusColor } }>
-					<span className={ 'vectarr-console-dot' + ( isValid ? ' is-valid' : '' ) } />
-					<code className="vectarr-console-preview">
+				<div className="vectex-console-status" style={ { borderTopColor: statusColor } }>
+					<span className={ 'vectex-console-dot' + ( isValid ? ' is-valid' : '' ) } />
+					<code className="vectex-console-preview">
 						{ ! hasExpr
 							? ''
 							: isValid
@@ -133,19 +133,19 @@ const ExpressionTabContent = () => {
 			</div>
 
 			{/* Actions */}
-			<footer className="vectarr-console-actions">
+			<footer className="vectex-console-actions">
 				<Button
 					variant="tertiary"
 					isDestructive
 					onClick={ handleRemove }
-					className="vectarr-console-btn-remove"
+					className="vectex-console-btn-remove"
 				>
 					{ __( 'Remove', 'vector-expressions' ) }
 				</Button>
 				<Button
 					variant="primary"
 					onClick={ handleApply }
-					className="vectarr-console-btn-apply"
+					className="vectex-console-btn-apply"
 				>
 					{ __( 'Apply', 'vector-expressions' ) }
 				</Button>
@@ -165,7 +165,7 @@ const ExpressionTabContent = () => {
  * Pro extends this via the `vectorExpressions.sidebar.tabs` filter.
  */
 const DEFAULT_TABS = [
-	{ name: 'logic', title: <LogicTabIcon />, className: 'vectarr-sidebar-tab' },
+	{ name: 'logic', title: <LogicTabIcon />, className: 'vectex-sidebar-tab' },
 ];
 
 /**
@@ -191,25 +191,25 @@ const VectorSidebarPanel = () => {
 		const exprTab = {
 			name: 'expression',
 			title: <ExpressionTabIcon />,
-			className: 'vectarr-sidebar-tab vectarr-sidebar-tab--expr',
+			className: 'vectex-sidebar-tab vectex-sidebar-tab--expr',
 		};
 		return [ exprTab, ...baseTabs ];
 	}, [ isTokenActive, baseTabs ] );
 
 	if ( ! selectedBlock ) {
 		return (
-			<div className="vectarr-sidebar-empty">
+			<div className="vectex-sidebar-empty">
 				<p>{ __( 'Select a block to edit its Vector settings.', 'vector-expressions' ) }</p>
 			</div>
 		);
 	}
 
 	const { clientId, attributes } = selectedBlock;
-	const vectarr_logic = attributes?.vectarr_logic;
+	const vectex_logic = attributes?.vectex_logic;
 
 	const update = ( key, val ) => {
 		updateBlockAttributes( clientId, {
-			vectarr_logic: { ...( vectarr_logic ?? {} ), [ key ]: val },
+			vectex_logic: { ...( vectex_logic ?? {} ), [ key ]: val },
 		} );
 	};
 
@@ -218,17 +218,17 @@ const VectorSidebarPanel = () => {
 		const tabName = tabs[0]?.name || 'logic';
 		if ( tabName === 'expression' ) {
 			return (
-				<div className="vectarr-sidebar-tab-content">
+				<div className="vectex-sidebar-tab-content">
 					<ExpressionTabContent />
 				</div>
 			);
 		}
 		return (
-			<div className="vectarr-sidebar-tab-content">
+			<div className="vectex-sidebar-tab-content">
 				{ applyFilters(
 					`vectorExpressions.sidebar.tab.${ tabName }`,
 					null,
-					vectarr_logic,
+					vectex_logic,
 					update,
 					blockName,
 				) }
@@ -242,18 +242,18 @@ const VectorSidebarPanel = () => {
 	return (
 		<TabPanel
 			key={ isTokenActive ? 'with-expr' : 'without-expr' }
-			className="vectarr-sidebar-tabs"
+			className="vectex-sidebar-tabs"
 			tabs={ tabs }
 			initialTabName={ initialTab }
 		>
 			{ ( tab ) => (
-				<div className="vectarr-sidebar-tab-content">
+				<div className="vectex-sidebar-tab-content">
 					{ tab.name === 'expression'
 						? <ExpressionTabContent />
 						: applyFilters(
 							`vectorExpressions.sidebar.tab.${ tab.name }`,
 							null,
-							vectarr_logic,
+							vectex_logic,
 							update,
 							blockName,
 						)
@@ -281,7 +281,7 @@ export const registerVectorSidebar = () => {
 					name={ SIDEBAR_NAME }
 					title={ __( 'Vector Expressions', 'vector-expressions' ) }
 					icon={ <SidebarIcon /> }
-					className="vectarr-sidebar"
+					className="vectex-sidebar"
 				>
 					<VectorSidebarPanel />
 				</PluginSidebar>

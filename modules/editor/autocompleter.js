@@ -80,13 +80,13 @@ const renderOption = (o) => {
   return el(
     "div",
     {
-      className: "vectarr-autocompleter-option",
+      className: "vectex-autocompleter-option",
       style: { padding: "0", width: "100%", flexWrap: "nowrap", gap: "8px" },
     },
     el(
       "span",
       {
-        className: "vectarr-ac-icon",
+        className: "vectex-ac-icon",
         style: { display: "inline-flex", flexShrink: 0, color: "#757575" },
       },
       el(RawHTML, null, iconSvg),

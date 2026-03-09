@@ -25,14 +25,14 @@ import { fetchPreview } from "./api.js";
 const { select } = window.wp.data;
 
 /**
- * Regex that matches a `<span … data-vectarr-expr="…" …>` opening tag.
+ * Regex that matches a `<span … data-vectex-expr="…" …>` opening tag.
  * Group 1: full tag interior, Group 2: expr value.
  */
-const SPAN_TAG_RE = /<span\b([^>]*\bdata-vectarr-expr="([^"]*)"[^>]*)>/gi;
+const SPAN_TAG_RE = /<span\b([^>]*\bdata-vectex-expr="([^"]*)"[^>]*)>/gi;
 
 // ─── Client-side Expression Resolver ────────────────────────────────────────
 
-const config = window.vectarrEditorConfig || {};
+const config = window.vectexEditorConfig || {};
 
 /**
  * Build entity-field resolver maps from PHP-localized root data.
@@ -190,7 +190,7 @@ const stripHtml = (html) => {
 /**
  * Strip HTML tags and decode entities for preview-safe plain text.
  *
- * Preview values are rendered via CSS `content: attr(data-vectarr-view)`,
+ * Preview values are rendered via CSS `content: attr(data-vectex-view)`,
  * which treats its input as plain text. This ensures any residual
  * HTML (e.g. WooCommerce price markup) is converted to readable text.
  *
@@ -208,7 +208,7 @@ const cleanPreview = (val) => {
 /**
  * Decode HTML entities in an attribute value captured from raw HTML.
  *
- * Expression attributes are stored as `data-vectarr-expr="&quot;now&quot;"`
+ * Expression attributes are stored as `data-vectex-expr="&quot;now&quot;"`
  * in the HTML string. The regex captures `&quot;now&quot;` literally,
  * but the parser and REST API expect the decoded form `"now"`.
  *
@@ -300,7 +300,7 @@ export const useHydrateViews = (
 
     const raw = attributes[attrName];
     const html = typeof raw === "string" ? raw : String(raw ?? "");
-    if (!html.includes("vectarr-expr-token")) return;
+    if (!html.includes("vectex-expr-token")) return;
 
     const editorPostId = select("core/editor")?.getCurrentPostId?.() || 0;
     const isQueryChild = postId !== editorPostId;
@@ -315,8 +315,8 @@ export const useHydrateViews = (
     html.replace(SPAN_TAG_RE, (_match, tagInner, rawExpr) => {
       if (!rawExpr) return;
       // Skip spans that already have a non-empty view (already hydrated).
-      // Empty views (data-vectarr-view="") must be re-hydrated.
-      const existingView = tagInner.match(/\bdata-vectarr-view="([^"]*)"/)?.[1];
+      // Empty views (data-vectex-view="") must be re-hydrated.
+      const existingView = tagInner.match(/\bdata-vectex-view="([^"]*)"/)?.[1];
       if (existingView && !isQueryChild) return;
 
       const expr = decodeAttr(rawExpr);
@@ -373,7 +373,7 @@ export const useHydrateViews = (
   }, [attributes[attrName], postId]);
 
   // For Query Loop blocks: re-apply cached views after EVERY render.
-  // React re-renders destroy DOM-only attributes (data-vectarr-view) on click,
+  // React re-renders destroy DOM-only attributes (data-vectex-view) on click,
   // selection change, or modal apply. This effect runs with no deps so it
   // fires after each reconciliation and re-stamps the cached values.
   // It only writes to DOM attributes — no state changes — so it cannot
@@ -391,14 +391,14 @@ export const useHydrateViews = (
 // ─── Attribute-based hydration (top-level blocks) ───────────────────────────
 
 /**
- * Inject `data-vectarr-view` into the HTML string and write back via setAttributes.
+ * Inject `data-vectex-view` into the HTML string and write back via setAttributes.
  * Used for blocks NOT inside a Query Loop (each has its own attributes).
  */
 const applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
   const updated = html.replace(SPAN_TAG_RE, (fullMatch, tagInner, rawExpr) => {
     if (!rawExpr) return fullMatch;
     // Skip spans that already have a non-empty view.
-    const existingView = tagInner.match(/\bdata-vectarr-view="([^"]*)"/)?.[1];
+    const existingView = tagInner.match(/\bdata-vectex-view="([^"]*)"/)?.[1];
     if (existingView) return fullMatch;
 
     const expr = decodeAttr(rawExpr);
@@ -408,11 +408,11 @@ const applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
     const cleaned = cleanPreview(view);
     const safeView = cleaned.replace(/"/g, "&quot;");
     const isEmpty = !cleaned.trim().replace(/\u00a0/g, "");
-    const emptyAttr = isEmpty ? ' data-vectarr-empty=""' : "";
+    const emptyAttr = isEmpty ? ' data-vectex-empty=""' : "";
 
     return fullMatch.replace(
       tagInner,
-      tagInner + ` data-vectarr-view="${safeView}"${emptyAttr}`,
+      tagInner + ` data-vectex-view="${safeView}"${emptyAttr}`,
     );
   });
 
@@ -425,7 +425,7 @@ const applyViewsAttr = (html, postId, attrName, setAttributes, lastWritten) => {
 // ─── DOM-based hydration (Query Loop blocks) ────────────────────────────────
 
 /**
- * Write `data-vectarr-view` directly to DOM elements for a specific block instance.
+ * Write `data-vectex-view` directly to DOM elements for a specific block instance.
  * Used for blocks inside Query Loops where setAttributes would clobber other
  * iterations' values (since all iterations share one template).
  *
@@ -442,21 +442,21 @@ const applyViewsDOM = (postId, clientId) => {
   const scope =
     postWrapper || root.querySelector(`[data-block="${clientId}"]`) || root;
 
-  const spans = scope.querySelectorAll("span.vectarr-expr-token");
+  const spans = scope.querySelectorAll("span.vectex-expr-token");
   spans.forEach((span) => {
-    const expr = span.getAttribute("data-vectarr-expr");
+    const expr = span.getAttribute("data-vectex-expr");
     if (!expr) return;
 
     const view = viewCache.get(cacheKey(expr, postId));
     if (view === undefined) return;
 
     const cleaned = cleanPreview(view);
-    span.setAttribute("data-vectarr-view", cleaned);
+    span.setAttribute("data-vectex-view", cleaned);
     const isEmpty = !cleaned.trim().replace(/\u00a0/g, "");
     if (isEmpty) {
-      span.setAttribute("data-vectarr-empty", "");
+      span.setAttribute("data-vectex-empty", "");
     } else {
-      span.removeAttribute("data-vectarr-empty");
+      span.removeAttribute("data-vectex-empty");
     }
   });
 };
