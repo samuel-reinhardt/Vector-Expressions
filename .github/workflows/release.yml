@@ -25,16 +25,22 @@ jobs:
 
       # Build a zip with the correct top-level folder name so WordPress
       # installs into wp-content/plugins/<slug>/ (not <RepoName>-<tag>/).
+      # The zip FILENAME includes version + build timestamp for traceability,
+      # but the internal folder stays as the plain slug for WP compatibility.
       - name: Build release zip
         id: zip
         run: |
           SLUG="${{ steps.slug.outputs.slug }}"
+          VERSION="${GITHUB_REF_NAME:-unversioned}"
+          TIMESTAMP="$(date -u +'%Y%m%d-%H%M%S')"
+          ZIP_NAME="${SLUG}-${VERSION}-${TIMESTAMP}.zip"
+
           mkdir -p "/tmp/${SLUG}"
           # Copy everything except .git, .github, assets (WP.org directory images),
           # scripts (dev build tooling), and node_modules into the named folder.
           rsync -a --exclude='.git' --exclude='.github' --exclude='assets' --exclude='scripts' --exclude='node_modules' ./ "/tmp/${SLUG}/"
-          cd /tmp && zip -r "${SLUG}.zip" "${SLUG}"
-          echo "path=/tmp/${SLUG}.zip" >> "$GITHUB_OUTPUT"
+          cd /tmp && zip -r "${ZIP_NAME}" "${SLUG}"
+          echo "path=/tmp/${ZIP_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
