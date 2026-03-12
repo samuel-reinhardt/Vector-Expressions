@@ -297,13 +297,37 @@ export const registerLogicPanel = () => {
 	);
 	const REQUIRED_CONTEXT = [ 'postId', 'postType' ];
 
-	// Intercept future block registrations.
+	/**
+	 * vectex_logic attribute schema — must be registered on the JS side so that
+	 * serializeBlock() includes it in the block comment delimiter. Without this,
+	 * third-party blocks (Kadence, GenerateBlocks, etc.) silently drop vectex_logic
+	 * during serialization because their bundled block.json doesn't define it.
+	 */
+	const VECTEX_LOGIC_SCHEMA = {
+		type: 'object',
+		default: {
+			visible: '',
+			visible_action: 'show',
+			class: '',
+		},
+	};
+
+	// Intercept future block registrations — inject usesContext + vectex_logic.
 	addFilter( 'blocks.registerBlockType', 'vectex-logic.inject-context', ( settings, name ) => {
 		if ( SKIP_CONVERT_BLOCKS.has( name ) ) return settings;
-		const existing = settings.usesContext || [];
-		const missing  = REQUIRED_CONTEXT.filter( ( c ) => ! existing.includes( c ) );
-		if ( missing.length === 0 ) return settings;
-		return { ...settings, usesContext: [ ...existing, ...missing ] };
+
+		const attrs   = settings.attributes || {};
+		const context = settings.usesContext || [];
+		const missingCtx = REQUIRED_CONTEXT.filter( ( c ) => ! context.includes( c ) );
+
+		return {
+			...settings,
+			attributes: {
+				...attrs,
+				...( attrs.vectex_logic ? {} : { vectex_logic: VECTEX_LOGIC_SCHEMA } ),
+			},
+			...( missingCtx.length ? { usesContext: [ ...context, ...missingCtx ] } : {} ),
+		};
 	} );
 
 	// Patch block types that were already registered before our filter.
@@ -313,13 +337,17 @@ export const registerLogicPanel = () => {
 	const { getBlockTypes, unregisterBlockType, registerBlockType } = window.wp.blocks;
 	( getBlockTypes() || [] ).forEach( ( type ) => {
 		if ( SKIP_CONVERT_BLOCKS.has( type.name ) ) return;
+
+		// Inject usesContext.
 		const existing = type.usesContext || [];
 		const missing  = REQUIRED_CONTEXT.filter( ( c ) => ! existing.includes( c ) );
-		if ( missing.length === 0 ) return;
+		if ( missing.length > 0 ) {
+			type.usesContext = [ ...existing, ...missing ];
+		}
 
-		// Mutate the type object directly — Gutenberg stores a mutable
-		// reference in its internal registry. This avoids the cost and
-		// side-effects of an unregister/re-register cycle.
-		type.usesContext = [ ...existing, ...missing ];
+		// Inject vectex_logic attribute schema.
+		if ( ! type.attributes?.vectex_logic ) {
+			type.attributes = { ...( type.attributes || {} ), vectex_logic: VECTEX_LOGIC_SCHEMA };
+		}
 	} );
 };

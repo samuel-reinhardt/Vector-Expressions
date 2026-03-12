@@ -1301,20 +1301,40 @@
       }
     );
     const REQUIRED_CONTEXT = ["postId", "postType"];
+    const VECTEX_LOGIC_SCHEMA = {
+      type: "object",
+      default: {
+        visible: "",
+        visible_action: "show",
+        class: ""
+      }
+    };
     addFilter2("blocks.registerBlockType", "vectex-logic.inject-context", (settings, name) => {
       if (SKIP_CONVERT_BLOCKS.has(name)) return settings;
-      const existing = settings.usesContext || [];
-      const missing = REQUIRED_CONTEXT.filter((c) => !existing.includes(c));
-      if (missing.length === 0) return settings;
-      return { ...settings, usesContext: [...existing, ...missing] };
+      const attrs = settings.attributes || {};
+      const context = settings.usesContext || [];
+      const missingCtx = REQUIRED_CONTEXT.filter((c) => !context.includes(c));
+      return {
+        ...settings,
+        attributes: {
+          ...attrs,
+          ...attrs.vectex_logic ? {} : { vectex_logic: VECTEX_LOGIC_SCHEMA }
+        },
+        ...missingCtx.length ? { usesContext: [...context, ...missingCtx] } : {}
+      };
     });
     const { getBlockTypes, unregisterBlockType, registerBlockType } = window.wp.blocks;
     (getBlockTypes() || []).forEach((type) => {
+      var _a;
       if (SKIP_CONVERT_BLOCKS.has(type.name)) return;
       const existing = type.usesContext || [];
       const missing = REQUIRED_CONTEXT.filter((c) => !existing.includes(c));
-      if (missing.length === 0) return;
-      type.usesContext = [...existing, ...missing];
+      if (missing.length > 0) {
+        type.usesContext = [...existing, ...missing];
+      }
+      if (!((_a = type.attributes) == null ? void 0 : _a.vectex_logic)) {
+        type.attributes = { ...type.attributes || {}, vectex_logic: VECTEX_LOGIC_SCHEMA };
+      }
     });
   };
 

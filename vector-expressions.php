@@ -101,7 +101,7 @@ final class VectorExpressions {
 		new SiteRoot();
 		new CoreModifiers();
 
-		add_action( 'init',                        [ $this, 'register_attributes' ] );
+		add_action( 'init',                        [ $this, 'register_attributes' ], 999 );
 		add_filter( 'render_block',                [ $this, 'render_block_logic' ], 20, 2 );
 		add_filter( 'the_content',                 [ $this, 'render_content' ], 20 );
 		add_filter( 'the_excerpt',                 [ $this, 'render_content' ], 20 );
@@ -260,7 +260,10 @@ final class VectorExpressions {
 	/**
 	 * Inject the `vectex_logic` attribute schema into every registered block type.
 	 *
-	 * Runs on `init` so all blocks are already registered.
+	 * Runs on `init` at priority 999 (late) so that third-party block plugins
+	 * (Kadence at 20, GenerateBlocks at 25, etc.) have already registered their
+	 * blocks. Without schema registration, the REST API strips `vectex_logic`
+	 * during post save, silently breaking visibility/class/bindings.
 	 *
 	 * @return void
 	 */
@@ -423,7 +426,7 @@ final class VectorExpressions {
 
 		$tags = new \WP_HTML_Tag_Processor( $html );
 
-		if ( ! $tags->next_tag() ) {
+		if ( ! $this->skip_to_block_root( $tags ) ) {
 			return $html;
 		}
 
@@ -494,6 +497,27 @@ final class VectorExpressions {
 		}
 
 		return $tags->get_updated_html();
+	}
+
+	/**
+	 * Advance a Tag Processor to the block's actual root element.
+	 *
+	 * Third-party blocks (Kadence, GenerateBlocks, etc.) often prepend
+	 * <style> or <script> tags before the visible root element. A bare
+	 * `next_tag()` would target those non-visual tags instead of the
+	 * block wrapper. This helper skips over them.
+	 *
+	 * @param \WP_HTML_Tag_Processor $tags The tag processor to advance.
+	 * @return bool True if a visual root element was found.
+	 */
+	private function skip_to_block_root( \WP_HTML_Tag_Processor $tags ): bool {
+		$skip = [ 'STYLE', 'SCRIPT', 'LINK', 'META' ];
+		while ( $tags->next_tag() ) {
+			if ( ! in_array( $tags->get_tag(), $skip, true ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
