@@ -23,27 +23,51 @@ jobs:
           echo "slug=${SLUG}" >> "$GITHUB_OUTPUT"
           echo "Package slug: ${SLUG}"
 
-      # Build a zip with the correct top-level folder name so WordPress
+      # Build two zips with the correct top-level folder name so WordPress
       # installs into wp-content/plugins/<slug>/ (not <RepoName>-<tag>/).
-      # The zip FILENAME includes version + build timestamp for traceability,
-      # but the internal folder stays as the plain slug for WP compatibility.
-      - name: Build release zip
+      #
+      # Produces:
+      #   <slug>-<version>-<YYYYMMDD>.zip  — versioned, date-stamped
+      #   <slug>.zip                        — stable, non-versioned
+      #
+      # Both contain the same contents with the plain slug as the
+      # internal folder name for WP compatibility.
+      - name: Build release zips
         id: zip
         run: |
           SLUG="${{ steps.slug.outputs.slug }}"
           VERSION="${GITHUB_REF_NAME:-unversioned}"
-          TIMESTAMP="$(date -u +'%Y%m%d-%H%M%S')"
-          ZIP_NAME="${SLUG}-${VERSION}-${TIMESTAMP}.zip"
+          DATESTAMP="$(date -u +'%Y%m%d')"
+
+          VERSIONED_ZIP="${SLUG}-${VERSION}-${DATESTAMP}.zip"
+          STABLE_ZIP="${SLUG}.zip"
 
           mkdir -p "/tmp/${SLUG}"
-          # Copy everything except .git, .github, assets (WP.org directory images),
-          # scripts (dev build tooling), and node_modules into the named folder.
           rsync -a --exclude='.git' --exclude='.github' --exclude='assets' --exclude='scripts' --exclude='node_modules' ./ "/tmp/${SLUG}/"
-          cd /tmp && zip -r "${ZIP_NAME}" "${SLUG}"
-          echo "path=/tmp/${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+
+          cd /tmp && zip -r "${VERSIONED_ZIP}" "${SLUG}"
+          cp "${VERSIONED_ZIP}" "${STABLE_ZIP}"
+
+          echo "versioned=/tmp/${VERSIONED_ZIP}" >> "$GITHUB_OUTPUT"
+          echo "stable=/tmp/${STABLE_ZIP}" >> "$GITHUB_OUTPUT"
+
+      # Delete the existing release (and all its assets) before recreating.
+      # This prevents duplicate descriptions and stale zip files when
+      # force-pushing a tag for the same version.
+      - name: Delete existing release
+        run: gh release delete "${{ github.ref_name }}" --yes --cleanup-tag=false 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ steps.zip.outputs.path }}
-          generate_release_notes: true
+        run: |
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          BODY="📋 **[Changelog](${REPO_URL}/blob/main/CHANGELOG.md)**"
+
+          gh release create "${{ github.ref_name }}" \
+            "${{ steps.zip.outputs.versioned }}" \
+            "${{ steps.zip.outputs.stable }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "${BODY}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
