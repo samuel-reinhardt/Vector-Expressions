@@ -40,12 +40,19 @@ const config = window.vectexEditorConfig || {};
  * For each root, maps `property key` → `entity field path`.
  * Properties without an explicit `entity` use 1:1 mapping (key → key).
  *
+ * Only includes roots whose properties declare at least one `entity`
+ * mapping — roots without entity backing (ACF, MB, WooCommerce, etc.)
+ * are skipped so they fall through to the REST preview endpoint.
+ *
  * @type {Record<string, Record<string, string>>}
  */
 const entityMaps = {};
 for (const root of config.roots || []) {
+  const props = root.properties || [];
+  if (!props.some((p) => p.entity)) continue;
+
   const map = {};
-  for (const prop of root.properties || []) {
+  for (const prop of props) {
     map[prop.key] = prop.entity || prop.key;
   }
   entityMaps[root.id] = map;
@@ -67,15 +74,22 @@ for (const root of config.roots || []) {
 /**
  * Special-case handlers for entity fields prefixed with `__`.
  * These require custom logic beyond simple field traversal.
+ *
+ * Return `undefined` to signal "data not available yet" — the
+ * expression will fall through to the REST preview endpoint.
+ * Return a string (including `""`) to signal a resolved value.
  */
 const specialHandlers = {
   /**
    * Post author name — fetches a separate user entity by author ID.
+   * Returns `undefined` if the post or user record hasn't loaded yet.
    */
   __author_name: (_record, _prop, postId, postType) => {
     const record = select("core").getEntityRecord("postType", postType, postId);
-    if (!record?.author) return "";
+    if (!record) return undefined;
+    if (!record.author) return "";
     const user = select("core").getUser(record.author);
+    if (user === undefined) return undefined;
     return user?.name ?? "";
   },
 
@@ -143,7 +157,9 @@ const resolveFromStore = (expr, postId, postType, editorPostId) => {
   if (entityField.startsWith("__")) {
     const handler = specialHandlers[entityField];
     if (!handler) return fail;
-    return { value: handler(null, prop, postId, postType), resolved: true };
+    const value = handler(null, prop, postId, postType);
+    if (value === undefined) return fail;
+    return { value, resolved: true };
   }
 
   // Fractal protection: html-type fields only for the editor post.

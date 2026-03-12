@@ -20,8 +20,10 @@
   var config = window.vectexEditorConfig || {};
   var entityMaps = {};
   for (const root of config.roots || []) {
+    const props = root.properties || [];
+    if (!props.some((p) => p.entity)) continue;
     const map = {};
-    for (const prop of root.properties || []) {
+    for (const prop of props) {
       map[prop.key] = prop.entity || prop.key;
     }
     entityMaps[root.id] = map;
@@ -37,12 +39,15 @@
   var specialHandlers = {
     /**
      * Post author name — fetches a separate user entity by author ID.
+     * Returns `undefined` if the post or user record hasn't loaded yet.
      */
     __author_name: (_record, _prop, postId, postType) => {
       var _a;
       const record = select("core").getEntityRecord("postType", postType, postId);
-      if (!(record == null ? void 0 : record.author)) return "";
+      if (!record) return void 0;
+      if (!record.author) return "";
       const user = select("core").getUser(record.author);
+      if (user === void 0) return void 0;
       return (_a = user == null ? void 0 : user.name) != null ? _a : "";
     },
     /**
@@ -78,7 +83,9 @@
     if (entityField.startsWith("__")) {
       const handler = specialHandlers[entityField];
       if (!handler) return fail;
-      return { value: handler(null, prop, postId, postType), resolved: true };
+      const value2 = handler(null, prop, postId, postType);
+      if (value2 === void 0) return fail;
+      return { value: value2, resolved: true };
     }
     const propType = (_a = typeMaps[root]) == null ? void 0 : _a[prop];
     if (propType === "html" && postId === editorPostId) {
