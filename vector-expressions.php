@@ -565,46 +565,42 @@ final class VectorExpressions {
 			return $html;
 		}
 
-		// Protect global content to prevent WYSIWYG fractals.
-		$this->parser->context->protect_global_content = true;
+		// No protect_global_content here — editor previews render via CSS
+		// ::before (data-vectex-view) and are never re-parsed, so there is
+		// no fractal risk.  strip_preview_html() handles HTML stripping.
+		$tags = new \WP_HTML_Tag_Processor( $html );
 
-		try {
-			$tags = new \WP_HTML_Tag_Processor( $html );
-
-			while ( $tags->next_tag( [ 'tag_name' => 'SPAN', 'class_name' => 'vectex-expr-token' ] ) ) {
-				$expr = $tags->get_attribute( 'data-vectex-expr' );
-				if ( ! $expr ) {
-					continue;
-				}
-
-				// Decode HTML entities back to raw expression text.
-				$raw_expr = html_entity_decode( $expr, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-
-				try {
-					$val  = $this->parser->evaluate_raw( $raw_expr );
-					$view = $this->strip_preview_html( $this->parser->safe_string( $val ) );
-				} catch ( \Throwable $e ) {
-					$view = '';
-				}
-
-				$tags->set_attribute( 'data-vectex-view', $view );
-
-				// Flag empty views so CSS can show a placeholder.
-				if ( '' === trim( str_replace( "\xC2\xA0", '', $view ) ) ) {
-					$tags->set_attribute( 'data-vectex-empty', '' );
-				} else {
-					$tags->remove_attribute( 'data-vectex-empty' );
-				}
-
-				// Strip stale attributes from older saves.
-				$tags->remove_attribute( 'data-vectex-speculative' );
-				$tags->remove_attribute( 'data-vectex-active' );
+		while ( $tags->next_tag( [ 'tag_name' => 'SPAN', 'class_name' => 'vectex-expr-token' ] ) ) {
+			$expr = $tags->get_attribute( 'data-vectex-expr' );
+			if ( ! $expr ) {
+				continue;
 			}
 
-			return $tags->get_updated_html();
-		} finally {
-			$this->parser->context->protect_global_content = false;
+			// Decode HTML entities back to raw expression text.
+			$raw_expr = html_entity_decode( $expr, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+
+			try {
+				$val  = $this->parser->evaluate_raw( $raw_expr );
+				$view = $this->strip_preview_html( $this->parser->safe_string( $val ) );
+			} catch ( \Throwable $e ) {
+				$view = '';
+			}
+
+			$tags->set_attribute( 'data-vectex-view', $view );
+
+			// Flag empty views so CSS can show a placeholder.
+			if ( '' === trim( str_replace( "\xC2\xA0", '', $view ) ) ) {
+				$tags->set_attribute( 'data-vectex-empty', '' );
+			} else {
+				$tags->remove_attribute( 'data-vectex-empty' );
+			}
+
+			// Strip stale attributes from older saves.
+			$tags->remove_attribute( 'data-vectex-speculative' );
+			$tags->remove_attribute( 'data-vectex-active' );
 		}
+
+		return $tags->get_updated_html();
 	}
 
 	/**
@@ -680,6 +676,7 @@ final class VectorExpressions {
 							'login'       => '',
 							'registered'  => '',
 							'url'         => '',
+							'role'        => '',
 							'roles'       => [],
 							'is_logged_in' => false,
 						];
@@ -691,6 +688,7 @@ final class VectorExpressions {
 						'login'       => $u->user_login,
 						'registered'  => $u->user_registered,
 						'url'         => $u->user_url,
+						'role'        => $u->roles[0] ?? '',
 						'roles'       => $u->roles,
 						'is_logged_in' => true,
 					];

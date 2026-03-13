@@ -33,6 +33,7 @@ class UserRoot extends Root {
 		'email'        => 'Email',
 		'login'        => [ 'label' => 'Username', 'entity' => 'username' ],
 		'id'           => 'ID',
+		'role'         => [ 'label' => 'Primary Role', 'entity' => '__role' ],
 		'roles'        => [ 'label' => 'Role(s)', 'type' => 'array', 'expr' => "user.roles | join ', '" ],
 		'is_logged_in' => [ 'label' => 'Logged In?', 'entity' => '__is_logged_in' ],
 		'url'          => [ 'label' => 'Profile URL', 'entity' => 'url' ],
@@ -43,7 +44,7 @@ class UserRoot extends Root {
 	protected array $patterns = [
 		[ 'expr' => "user.is_logged_in ? 'Hello, ' + user.name : 'Hello, Guest'", 'label' => 'Greeting by name' ],
 		[ 'expr' => "user.is_logged_in ? 'member' : 'visitor'", 'label' => 'Conditional class' ],
-		[ 'expr' => "user.roles | join ', ' | match administrator='Admin' editor='Editor' default='Member'", 'label' => 'Show role label' ],
+		[ 'expr' => "user.role | match administrator='Admin' editor='Editor' default='Member'", 'label' => 'Show role label' ],
 		[ 'expr' => "user.name | default 'Guest'", 'label' => 'Name with fallback' ],
 	];
 

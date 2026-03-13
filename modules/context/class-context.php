@@ -107,9 +107,13 @@ class Context {
 				return new \VectorExpressions\ObjectProxy( $target );
 			}
 
-			// Computed property: cannot be expressed as a simple property alias.
+			// Computed properties: cannot be expressed as simple property aliases.
 			if ( 'is_logged_in' === $key && $target instanceof \WP_User ) {
 				return $target->ID > 0;
+			}
+
+			if ( 'role' === $key && $target instanceof \WP_User ) {
+				return $target->roles[0] ?? '';
 			}
 
 			// Resolve post author name without exposing wp_users internals.

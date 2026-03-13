@@ -97,6 +97,14 @@ const specialHandlers = {
    * User logged-in state — always true in the editor (you must be logged in).
    */
   __is_logged_in: () => "true",
+
+  /**
+   * Primary user role — shorthand for roles[0].
+   */
+  __role: () => {
+    const roles = window.vectexContext?.user?.roles;
+    return Array.isArray(roles) && roles.length ? roles[0] : "";
+  },
 };
 
 /**
@@ -162,10 +170,21 @@ const resolveFromStore = (expr, postId, postType, editorPostId) => {
     return { value, resolved: true };
   }
 
-  // Fractal protection: html-type fields only for the editor post.
   const propType = typeMaps[root]?.[prop];
+
+  // HTML-type fields on the editor post: resolve for display but flag as
+  // DOM-only.  Writing these values via setAttributes would persist
+  // post content/excerpt text into the block markup, breaking Gutenberg's
+  // block validation on reload.
   if (propType === "html" && postId === editorPostId) {
-    return { value: "", resolved: true };
+    if (!postId || !postType) return fail;
+    const record = select("core").getEntityRecord("postType", postType, postId);
+    if (!record) return fail;
+    let value = resolveField(record, entityField);
+    value = cleanPreview(value) ?? "";
+    const key = cacheKey(expr.trim(), postId);
+    domOnlyKeys.add(key);
+    return { value, resolved: true };
   }
 
   // Resolve from entity store based on root type.
@@ -186,6 +205,11 @@ const resolveFromStore = (expr, postId, postType, editorPostId) => {
   if (!record) return fail;
 
   let value = resolveField(record, entityField);
+
+  // HTML-type fields: strip tags to plain text for CSS ::before rendering.
+  if (propType === "html") {
+    value = cleanPreview(value) ?? "";
+  }
 
   // Date fields: strip the T separator for readability.
   if (propType === "date" && value.includes("T")) {
@@ -267,6 +291,15 @@ const viewCache = new Map();
 const cacheKey = (expr, postId) => `${expr}::${postId}`;
 
 /**
+ * Cache keys whose values must only be applied via DOM manipulation,
+ * never persisted via setAttributes.  Used for html-type fields
+ * (excerpt, content) on the editor post to avoid block validation breaks.
+ *
+ * @type {Set<string>}
+ */
+const domOnlyKeys = new Set();
+
+/**
  * Look up a cached preview value for an expression + postId.
  * Used by `convertTokens` and `applyUpdate` to embed the view in format
  * data so it survives React re-renders (click, apply, selection change).
@@ -289,6 +322,9 @@ export const getCachedView = (expr, postId) =>
  * For blocks inside a Query Loop (where `postId !== editorPostId`), previews
  * are written directly to the DOM because `setAttributes` would update the
  * shared template, overwriting all iterations with the last one's values.
+ *
+ * HTML-type fields (excerpt, content) on the editor post are also applied
+ * via DOM-only to prevent block validation errors on reload.
  *
  * @param {Object}      attributes    Block's current attributes.
  * @param {Function}    setAttributes Block's attribute setter.
@@ -327,6 +363,7 @@ export const useHydrateViews = (
     // Resolve all expressions (cache or entity store).
     const toFetch = new Set();
     let needsUpdate = false;
+    let hasDomOnly = false;
 
     html.replace(SPAN_TAG_RE, (_match, tagInner, rawExpr) => {
       if (!rawExpr) return;
@@ -346,23 +383,36 @@ export const useHydrateViews = (
         );
         if (result.resolved) {
           viewCache.set(key, result.value);
-          needsUpdate = true;
+          if (domOnlyKeys.has(key)) {
+            hasDomOnly = true;
+          } else {
+            needsUpdate = true;
+          }
         } else {
           toFetch.add(expr);
         }
       } else {
-        needsUpdate = true;
+        if (domOnlyKeys.has(key)) {
+          hasDomOnly = true;
+        } else {
+          needsUpdate = true;
+        }
       }
     });
 
-    if (!needsUpdate && toFetch.size === 0) return;
+    if (!needsUpdate && !hasDomOnly && toFetch.size === 0) return;
 
     // Apply immediately if all resolved.
     if (toFetch.size === 0) {
       if (isQueryChild) {
         applyViewsDOM(postId, clientId);
       } else {
-        applyViewsAttr(html, postId, attrName, setAttributes, lastWritten);
+        if (needsUpdate) {
+          applyViewsAttr(html, postId, attrName, setAttributes, lastWritten);
+        }
+        if (hasDomOnly) {
+          requestAnimationFrame(() => applyViewsDOM(postId, clientId));
+        }
       }
       return;
     }
@@ -384,20 +434,18 @@ export const useHydrateViews = (
         applyViewsDOM(postId, clientId);
       } else {
         applyViewsAttr(html, postId, attrName, setAttributes, lastWritten);
+        // Always follow up with a DOM pass for any DOM-only values.
+        requestAnimationFrame(() => applyViewsDOM(postId, clientId));
       }
     });
   }, [attributes[attrName], postId]);
 
-  // For Query Loop blocks: re-apply cached views after EVERY render.
-  // React re-renders destroy DOM-only attributes (data-vectex-view) on click,
-  // selection change, or modal apply. This effect runs with no deps so it
-  // fires after each reconciliation and re-stamps the cached values.
-  // It only writes to DOM attributes — no state changes — so it cannot
-  // trigger further re-renders.
+  // Re-apply cached views after EVERY render for blocks that use DOM-only
+  // hydration (Query Loop children, and editor-post blocks with html-type
+  // values).  React re-renders destroy DOM-only attributes on click,
+  // selection change, or modal apply.
   useEffect(() => {
     if (!attrName) return;
-    const editorPostId = select("core/editor")?.getCurrentPostId?.() || 0;
-    if (postId === editorPostId) return;
 
     const id = requestAnimationFrame(() => applyViewsDOM(postId, clientId));
     return () => cancelAnimationFrame(id);

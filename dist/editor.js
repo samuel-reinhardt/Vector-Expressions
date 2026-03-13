@@ -53,7 +53,15 @@
     /**
      * User logged-in state — always true in the editor (you must be logged in).
      */
-    __is_logged_in: () => "true"
+    __is_logged_in: () => "true",
+    /**
+     * Primary user role — shorthand for roles[0].
+     */
+    __role: () => {
+      var _a, _b;
+      const roles = (_b = (_a = window.vectexContext) == null ? void 0 : _a.user) == null ? void 0 : _b.roles;
+      return Array.isArray(roles) && roles.length ? roles[0] : "";
+    }
   };
   var resolveField = (record, entityField) => {
     var _a;
@@ -70,7 +78,7 @@
     return String(val);
   };
   var resolveFromStore = (expr, postId, postType, editorPostId) => {
-    var _a;
+    var _a, _b, _c;
     const fail = { value: "", resolved: false };
     const parts = expr.trim().split(".");
     if (parts.length !== 2) return fail;
@@ -89,7 +97,14 @@
     }
     const propType = (_a = typeMaps[root]) == null ? void 0 : _a[prop];
     if (propType === "html" && postId === editorPostId) {
-      return { value: "", resolved: true };
+      if (!postId || !postType) return fail;
+      const record2 = select("core").getEntityRecord("postType", postType, postId);
+      if (!record2) return fail;
+      let value2 = resolveField(record2, entityField);
+      value2 = (_b = cleanPreview(value2)) != null ? _b : "";
+      const key = cacheKey(expr.trim(), postId);
+      domOnlyKeys.add(key);
+      return { value: value2, resolved: true };
     }
     let record;
     if (root === "site") {
@@ -102,6 +117,9 @@
     }
     if (!record) return fail;
     let value = resolveField(record, entityField);
+    if (propType === "html") {
+      value = (_c = cleanPreview(value)) != null ? _c : "";
+    }
     if (propType === "date" && value.includes("T")) {
       value = value.replace("T", " ");
     }
@@ -128,6 +146,7 @@
   };
   var viewCache = /* @__PURE__ */ new Map();
   var cacheKey = (expr, postId) => `${expr}::${postId}`;
+  var domOnlyKeys = /* @__PURE__ */ new Set();
   var getCachedView = (expr, postId) => viewCache.get(cacheKey(expr, postId));
   var useHydrateViews = (attributes, setAttributes, attrName, blockName, postId, postType, clientId) => {
     const { useEffect: useEffect2, useRef: useRef3 } = window.wp.element;
@@ -143,6 +162,7 @@
       if (!isQueryChild && html === lastWritten.current) return;
       const toFetch = /* @__PURE__ */ new Set();
       let needsUpdate = false;
+      let hasDomOnly = false;
       html.replace(SPAN_TAG_RE, (_match, tagInner, rawExpr) => {
         var _a2;
         if (!rawExpr) return;
@@ -159,20 +179,33 @@
           );
           if (result.resolved) {
             viewCache.set(key, result.value);
-            needsUpdate = true;
+            if (domOnlyKeys.has(key)) {
+              hasDomOnly = true;
+            } else {
+              needsUpdate = true;
+            }
           } else {
             toFetch.add(expr);
           }
         } else {
-          needsUpdate = true;
+          if (domOnlyKeys.has(key)) {
+            hasDomOnly = true;
+          } else {
+            needsUpdate = true;
+          }
         }
       });
-      if (!needsUpdate && toFetch.size === 0) return;
+      if (!needsUpdate && !hasDomOnly && toFetch.size === 0) return;
       if (toFetch.size === 0) {
         if (isQueryChild) {
           applyViewsDOM(postId, clientId);
         } else {
-          applyViewsAttr(html, postId, attrName, setAttributes, lastWritten);
+          if (needsUpdate) {
+            applyViewsAttr(html, postId, attrName, setAttributes, lastWritten);
+          }
+          if (hasDomOnly) {
+            requestAnimationFrame(() => applyViewsDOM(postId, clientId));
+          }
         }
         return;
       }
@@ -194,14 +227,12 @@
           applyViewsDOM(postId, clientId);
         } else {
           applyViewsAttr(html, postId, attrName, setAttributes, lastWritten);
+          requestAnimationFrame(() => applyViewsDOM(postId, clientId));
         }
       });
     }, [attributes[attrName], postId]);
     useEffect2(() => {
-      var _a, _b;
       if (!attrName) return;
-      const editorPostId = ((_b = (_a = select("core/editor")) == null ? void 0 : _a.getCurrentPostId) == null ? void 0 : _b.call(_a)) || 0;
-      if (postId === editorPostId) return;
       const id = requestAnimationFrame(() => applyViewsDOM(postId, clientId));
       return () => cancelAnimationFrame(id);
     });
