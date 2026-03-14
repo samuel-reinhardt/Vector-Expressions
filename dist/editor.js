@@ -649,6 +649,108 @@
       return true;
     });
   };
+  var ALL_ROOTS = config3.roots || [];
+  var ALL_MODIFIERS = config3.modifiers || [];
+  var CORE_GROUPS = {
+    content: {
+      key: "content",
+      label: "Content",
+      order: 0,
+      icon: `<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><rect x="3" y="2" width="14" height="16" rx="2" fill="currentColor"/><path d="M7 6h6M7 10h6M7 14h3" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>`
+    },
+    context: {
+      key: "context",
+      label: "Context",
+      order: 1,
+      icon: `<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" fill="currentColor"/><path d="M10 6v4l3 2" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>`
+    },
+    modifiers: {
+      key: "modifiers",
+      label: "Modifiers",
+      order: 2,
+      icon: `<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M4 4h12l-4.5 5.5v6.5l-3 2v-8.5z" fill="currentColor"/></svg>`
+    }
+  };
+  var buildGroupDefs = () => {
+    const defs = { ...CORE_GROUPS };
+    let autoOrder = 20;
+    for (const root of ALL_ROOTS) {
+      if (root.group && !defs[root.group]) {
+        defs[root.group] = {
+          key: root.group,
+          label: root.group.charAt(0).toUpperCase() + root.group.slice(1),
+          order: autoOrder++,
+          icon: root.icon || ""
+        };
+      }
+    }
+    return defs;
+  };
+  var GROUP_DEFS = buildGroupDefs();
+  var buildMaps = () => {
+    const categoryGroup = {};
+    const categoryAccent = {};
+    categoryGroup.User = "content";
+    categoryGroup.Post = "content";
+    categoryGroup.Site = "content";
+    categoryGroup.Modifier = "modifiers";
+    categoryAccent.Modifier = "modifier";
+    const items = [
+      ...ALL_ROOTS.map((r) => ({
+        category: r.label,
+        group: r.group,
+        accent: r.accent
+      })),
+      ...ALL_MODIFIERS
+    ];
+    for (const item of items) {
+      const cat = item.category || item.label;
+      if (!cat) continue;
+      if (item.group) categoryGroup[cat] = item.group;
+      if (item.accent) categoryAccent[cat] = item.accent;
+    }
+    for (const [catLabel, groupId] of Object.entries(categoryGroup)) {
+      const patternLabel = catLabel + " Patterns";
+      if (!categoryGroup[patternLabel]) {
+        categoryGroup[patternLabel] = groupId;
+      }
+      const patternLabel2 = catLabel + " Pattern";
+      if (!categoryGroup[patternLabel2]) {
+        categoryGroup[patternLabel2] = groupId;
+      }
+    }
+    return { categoryGroup, categoryAccent };
+  };
+  var { categoryGroup: CATEGORY_GROUPS, categoryAccent: ACCENTS } = buildMaps();
+  var sortSubCategories = (cats) => cats.sort((a, b) => {
+    const aIsMod = /modifier/i.test(a.label);
+    const bIsMod = /modifier/i.test(b.label);
+    if (aIsMod !== bIsMod) return aIsMod ? 1 : -1;
+    return a.label.localeCompare(b.label);
+  });
+  var groupCategories = (flatCategories) => {
+    const groups = {};
+    const ungrouped = [];
+    for (const cat of flatCategories) {
+      const groupId = CATEGORY_GROUPS[cat.label];
+      if (groupId && GROUP_DEFS[groupId]) {
+        if (!groups[groupId]) {
+          groups[groupId] = { ...GROUP_DEFS[groupId], categories: [] };
+        }
+        groups[groupId].categories.push({
+          ...cat,
+          accent: ACCENTS[cat.label] || null
+        });
+      } else {
+        ungrouped.push(cat);
+      }
+    }
+    for (const group of Object.values(groups)) {
+      sortSubCategories(group.categories);
+    }
+    const sorted = Object.values(groups).sort((a, b) => a.order - b.order);
+    return [...sorted, ...ungrouped];
+  };
   var getCategories = (completions) => {
     var _a;
     const seen = /* @__PURE__ */ new Map();
@@ -684,9 +786,10 @@
         patternBuckets.get(bucketLabel).items.push({ ...p, category: bucketLabel });
       }
     }
-    const cats = [...seen.values(), ...patternBuckets.values()];
+    const flatCats = [...seen.values(), ...patternBuckets.values()];
+    const grouped = groupCategories(flatCats);
     const { applyFilters: applyFilters2 } = window.wp.hooks;
-    return applyFilters2 ? applyFilters2("vectorExpressions.suggestions.categories", cats, completions) : cats;
+    return applyFilters2 ? applyFilters2("vectorExpressions.suggestions.categories", grouped, completions) : grouped;
   };
   var ExpressionSuggestions = ({ expr, onSelect }) => {
     const [search, setSearch] = useState("");
@@ -718,15 +821,26 @@
       });
     };
     const handleSelect = (s) => {
-      var _a;
       const insertExpr = s.expr;
-      let newValue = insertExpr;
-      if ((_a = s.category) == null ? void 0 : _a.endsWith("Modifier")) {
+      const isModifier = /^\s*\|/.test(insertExpr);
+      const isPattern = /pattern/i.test(s.category || "");
+      let newValue;
+      if (isModifier) {
         let appended = expr.trim();
         if (!appended.endsWith("|") && appended.length > 0) {
           appended += " ";
         }
         newValue = appended + insertExpr;
+      } else if (isPattern) {
+        newValue = insertExpr;
+      } else {
+        const trimmed = expr.trim();
+        const pipeIdx = trimmed.indexOf("|");
+        if (pipeIdx > -1) {
+          newValue = insertExpr + " " + trimmed.slice(pipeIdx).trim();
+        } else {
+          newValue = insertExpr;
+        }
       }
       onSelect(newValue);
     };
