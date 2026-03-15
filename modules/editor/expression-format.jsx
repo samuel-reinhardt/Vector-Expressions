@@ -813,6 +813,116 @@ export const ExpressionSuggestions = ( { expr, onSelect } ) => {
 	);
 };
 
+// ── Paste-to-Pill Conversion ─────────────────────────────────────────────────
+
+/**
+ * Regex for detecting raw {{ expression }} tokens in RichText text.
+ * Captures the inner expression between the delimiters.
+ * Uses a non-greedy match to handle multiple tokens in one paste.
+ */
+const PASTE_TOKEN_RE = /\{\{\s*(.+?)\s*\}\}/g;
+
+/**
+ * Auto-converts pasted {{ expression }} text into `vector/expression`
+ * format spans.
+ *
+ * Listens for the `paste` event on the editor content element. After
+ * Gutenberg processes the paste (DOM settles via requestAnimationFrame),
+ * scans the RichText value for un-formatted `{{ }}` patterns and applies
+ * the format right-to-left to avoid offset displacement.
+ *
+ * The expression text is extracted from the `{{ }}` delimiters and set
+ * as the `data-vectex-expr` attribute immediately so previews hydrate.
+ */
+const usePasteConversion = ( contentRef, value, onChange ) => {
+	const valueRef    = useRef( value );
+	const onChangeRef = useRef( onChange );
+
+	// Keep refs current across renders.
+	useLayoutEffect( () => {
+		valueRef.current    = value;
+		onChangeRef.current = onChange;
+	}, [ value, onChange ] );
+
+	useEffect( () => {
+		let el       = null;
+		let interval = null;
+
+		const onPaste = () => {
+			// Let Gutenberg finish its native paste processing first.
+			requestAnimationFrame( () => {
+				const val     = valueRef.current;
+				const text    = val?.text || '';
+				const formats = val?.formats || [];
+
+				// Fast path: skip if no {{ }} tokens present.
+				if ( ! text.includes( '{{' ) ) return;
+
+				// Collect all {{ expression }} matches that are NOT already formatted.
+				const matches = [];
+				let m;
+				PASTE_TOKEN_RE.lastIndex = 0;
+				while ( ( m = PASTE_TOKEN_RE.exec( text ) ) !== null ) {
+					const startIdx = m.index;
+					const endIdx   = m.index + m[0].length;
+					const expr     = m[1].trim();
+
+					// Skip if this range already has the vector/expression format.
+					const alreadyFormatted = formats[ startIdx ]?.some(
+						( f ) => f.type === 'vector/expression'
+					);
+
+					if ( ! alreadyFormatted && expr ) {
+						matches.push( { start: startIdx, end: endIdx, expr } );
+					}
+				}
+
+				if ( matches.length === 0 ) return;
+
+				// Apply formats right-to-left to preserve earlier offsets.
+				let updated = val;
+				for ( let i = matches.length - 1; i >= 0; i-- ) {
+					const { start, end, expr } = matches[ i ];
+					updated = applyFormat(
+						updated,
+						{
+							type:       'vector/expression',
+							attributes: { expr, contentEditable: 'false' },
+						},
+						start,
+						end
+					);
+				}
+
+				// Place cursor after the last converted token.
+				updated.start = updated.end;
+				onChangeRef.current( updated );
+			} );
+		};
+
+		const tryAttach = () => {
+			if ( el ) return true;
+			if ( contentRef.current ) {
+				el = contentRef.current;
+				el.addEventListener( 'paste', onPaste, true );
+				return true;
+			}
+			return false;
+		};
+
+		if ( ! tryAttach() ) {
+			interval = setInterval( () => {
+				if ( tryAttach() ) clearInterval( interval );
+			}, 100 );
+		}
+
+		return () => {
+			if ( interval ) clearInterval( interval );
+			if ( el ) el.removeEventListener( 'paste', onPaste, true );
+		};
+	}, [] );
+};
+
 // ── ExpressionEdit ───────────────────────────────────────────────────────────
 
 /**
@@ -954,6 +1064,9 @@ const ExpressionEdit = ( { isActive, activeAttributes, value, onChange, contentR
 		isActiveRef, tokenActiveRef,
 		dismissRef, openSidebarRef,
 	} );
+
+	// Auto-convert pasted {{ expression }} text into format pills.
+	usePasteConversion( contentRef, value, onChange );
 
 	// Toolbar button only — no popover.
 	return (

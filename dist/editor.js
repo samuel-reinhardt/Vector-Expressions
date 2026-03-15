@@ -1018,6 +1018,76 @@
       ))));
     })());
   };
+  var PASTE_TOKEN_RE = /\{\{\s*(.+?)\s*\}\}/g;
+  var usePasteConversion = (contentRef, value, onChange) => {
+    const valueRef = useRef2(value);
+    const onChangeRef = useRef2(onChange);
+    useLayoutEffect2(() => {
+      valueRef.current = value;
+      onChangeRef.current = onChange;
+    }, [value, onChange]);
+    useEffect(() => {
+      let el2 = null;
+      let interval = null;
+      const onPaste = () => {
+        requestAnimationFrame(() => {
+          var _a;
+          const val = valueRef.current;
+          const text = (val == null ? void 0 : val.text) || "";
+          const formats = (val == null ? void 0 : val.formats) || [];
+          if (!text.includes("{{")) return;
+          const matches = [];
+          let m;
+          PASTE_TOKEN_RE.lastIndex = 0;
+          while ((m = PASTE_TOKEN_RE.exec(text)) !== null) {
+            const startIdx = m.index;
+            const endIdx = m.index + m[0].length;
+            const expr = m[1].trim();
+            const alreadyFormatted = (_a = formats[startIdx]) == null ? void 0 : _a.some(
+              (f) => f.type === "vector/expression"
+            );
+            if (!alreadyFormatted && expr) {
+              matches.push({ start: startIdx, end: endIdx, expr });
+            }
+          }
+          if (matches.length === 0) return;
+          let updated = val;
+          for (let i = matches.length - 1; i >= 0; i--) {
+            const { start, end, expr } = matches[i];
+            updated = applyFormat(
+              updated,
+              {
+                type: "vector/expression",
+                attributes: { expr, contentEditable: "false" }
+              },
+              start,
+              end
+            );
+          }
+          updated.start = updated.end;
+          onChangeRef.current(updated);
+        });
+      };
+      const tryAttach = () => {
+        if (el2) return true;
+        if (contentRef.current) {
+          el2 = contentRef.current;
+          el2.addEventListener("paste", onPaste, true);
+          return true;
+        }
+        return false;
+      };
+      if (!tryAttach()) {
+        interval = setInterval(() => {
+          if (tryAttach()) clearInterval(interval);
+        }, 100);
+      }
+      return () => {
+        if (interval) clearInterval(interval);
+        if (el2) el2.removeEventListener("paste", onPaste, true);
+      };
+    }, []);
+  };
   var ExpressionEdit = ({ isActive, activeAttributes, value, onChange, contentRef }) => {
     const isActiveRef = useRef2(false);
     const tokenActiveRef = useRef2(false);
@@ -1131,6 +1201,7 @@
       dismissRef,
       openSidebarRef
     });
+    usePasteConversion(contentRef, value, onChange);
     return /* @__PURE__ */ wp.element.createElement(
       RichTextToolbarButton,
       {
@@ -1659,9 +1730,158 @@
     });
   };
 
+  // modules/editor/paste-scanner.js
+  var { subscribe, select: select4, dispatch } = window.wp.data;
+  var RAW_TOKEN_RE = /\{\{\s*(.+?)\s*\}\}/g;
+  var hasRawTokens = (html) => {
+    if (!html || typeof html !== "string") return false;
+    if (!html.includes("{{")) return false;
+    const stripped = html.replace(
+      /<span\b[^>]*\bvectex-expr-token\b[^>]*>.*?<\/span>/gi,
+      ""
+    );
+    return RAW_TOKEN_RE.test(stripped);
+  };
+  var wrapTokens = (html) => {
+    const masks = [];
+    let masked = html.replace(
+      /<span\b[^>]*\bvectex-expr-token\b[^>]*>.*?<\/span>/gi,
+      (match) => {
+        const key = `VE_MASK_${masks.length}`;
+        masks.push(match);
+        return key;
+      }
+    );
+    const codeMasks = [];
+    masked = masked.replace(
+      /<(code|pre|kbd)(\b[^>]*)>(.*?)<\/\1>/gis,
+      (match) => {
+        const key = `VE_CODE_${codeMasks.length}`;
+        codeMasks.push(match);
+        return key;
+      }
+    );
+    RAW_TOKEN_RE.lastIndex = 0;
+    masked = masked.replace(RAW_TOKEN_RE, (full, inner) => {
+      const expr = inner.trim();
+      if (!expr) return full;
+      const safeExpr = expr.replace(/"/g, "&quot;");
+      return `<span class="vectex-expr-token" data-vectex-expr="${safeExpr}" contenteditable="false">${full}</span>`;
+    });
+    for (let i = 0; i < codeMasks.length; i++) {
+      masked = masked.replace(`VE_CODE_${i}`, codeMasks[i]);
+    }
+    for (let i = 0; i < masks.length; i++) {
+      masked = masked.replace(`VE_MASK_${i}`, masks[i]);
+    }
+    return masked;
+  };
+  var flattenBlocks = (blocks) => {
+    var _a;
+    const result = [];
+    for (const block of blocks) {
+      result.push(block);
+      if ((_a = block.innerBlocks) == null ? void 0 : _a.length) {
+        result.push(...flattenBlocks(block.innerBlocks));
+      }
+    }
+    return result;
+  };
+  var DENYLIST = /* @__PURE__ */ new Set([
+    "core/code",
+    "core/freeform",
+    "core/preformatted",
+    "core/html",
+    "core/shortcode",
+    "core/verse"
+  ]);
+  var RICHTEXT_ATTRS = ["content", "citation", "value", "text", "caption"];
+  var processed = /* @__PURE__ */ new Set();
+  var lastPostId = null;
+  var initPasteScanner = () => {
+    let debounceId = null;
+    console.log("[VectEx PasteScanner] Initialized");
+    subscribe(() => {
+      if (debounceId) return;
+      debounceId = requestAnimationFrame(() => {
+        debounceId = null;
+        scanBlocks();
+      });
+    });
+  };
+  var scanBlocks = () => {
+    var _a, _b;
+    const blockEditor = select4("core/block-editor");
+    if (!blockEditor) {
+      console.log("[VectEx PasteScanner] No block editor store");
+      return;
+    }
+    const blocks = blockEditor.getBlocks();
+    if (!(blocks == null ? void 0 : blocks.length)) {
+      console.log("[VectEx PasteScanner] No blocks found");
+      return;
+    }
+    console.log(`[VectEx PasteScanner] Scanning ${blocks.length} top-level blocks`);
+    const editor = select4("core/editor");
+    const postId = ((_a = editor == null ? void 0 : editor.getCurrentPostId) == null ? void 0 : _a.call(editor)) || 0;
+    if (postId !== lastPostId) {
+      processed.clear();
+      lastPostId = postId;
+    }
+    const allBlocks = flattenBlocks(blocks);
+    const updates = [];
+    for (const block of allBlocks) {
+      if (processed.has(block.clientId)) continue;
+      if (DENYLIST.has(block.name)) {
+        processed.add(block.clientId);
+        continue;
+      }
+      const attrs = block.attributes;
+      if (!attrs) continue;
+      let changed = false;
+      const newAttrs = {};
+      for (const attr of RICHTEXT_ATTRS) {
+        const rawVal = attrs[attr];
+        if (rawVal == null) continue;
+        let val;
+        if (typeof rawVal === "string") {
+          val = rawVal;
+        } else if (typeof (rawVal == null ? void 0 : rawVal.toHTMLString) === "function") {
+          val = rawVal.toHTMLString();
+        } else if (typeof (rawVal == null ? void 0 : rawVal.toString) === "function") {
+          val = rawVal.toString();
+        } else {
+          continue;
+        }
+        if (!val) continue;
+        console.log(`[VectEx PasteScanner] Block ${block.name} (${block.clientId.slice(0, 8)}) attr="${attr}" type=${typeof rawVal}${typeof rawVal === "object" ? " (" + ((_b = rawVal == null ? void 0 : rawVal.constructor) == null ? void 0 : _b.name) + ")" : ""}`, val.substring(0, 150));
+        const raw = hasRawTokens(val);
+        if (val.includes("{{")) {
+          console.log(`[VectEx PasteScanner]   \u2192 has {{ }}, hasRawTokens=${raw}`);
+        }
+        if (!raw) continue;
+        const wrapped = wrapTokens(val);
+        console.log(`[VectEx PasteScanner]   \u2192 Wrapping!`, { before: val.substring(0, 120), after: wrapped.substring(0, 120) });
+        newAttrs[attr] = wrapped;
+        changed = true;
+      }
+      processed.add(block.clientId);
+      if (changed) {
+        updates.push({ clientId: block.clientId, attrs: newAttrs });
+      }
+    }
+    if (updates.length > 0) {
+      const { updateBlockAttributes } = dispatch("core/block-editor");
+      for (const { clientId, attrs } of updates) {
+        updateBlockAttributes(clientId, attrs);
+      }
+    }
+  };
+
   // modules/editor/editor.jsx
   registerExpressionFormat();
   registerAutocompleter();
   registerLogicPanel();
   registerVectorSidebar();
+  initPasteScanner();
 })();
