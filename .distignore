@@ -1,0 +1,29 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# GitHub
+.github
+
+# Build tooling
+node_modules
+.turbo
+package.json
+package-lock.json
+pnpm-lock.yaml
+
+# WordPress.org directory assets (synced separately)
+assets
+
+# Development / meta files
+scripts
+docs
+blueprint.json
+readme-meta.json
+DEVELOPER.md
+expressions-logo.svg
+
+# Tests
+tests
+phpunit.xml

@@ -12,6 +12,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      slug: ${{ steps.slug.outputs.slug }}
     steps:
       - uses: actions/checkout@v4
 
@@ -71,3 +73,23 @@ jobs:
             --notes "${BODY}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Deploy to WordPress.org SVN repository.
+  # Only runs the deploy step when SVN credentials are configured.
+  # Repos without SVN_USERNAME/SVN_PASSWORD secrets silently skip.
+  deploy-wporg:
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+      SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to WordPress.org
+        if: ${{ env.SVN_USERNAME != '' }}
+        uses: 10up/action-wordpress-plugin-deploy@stable
+        env:
+          SLUG: ${{ needs.release.outputs.slug }}
+          ASSETS_DIR: assets
+

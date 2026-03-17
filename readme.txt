@@ -6,236 +6,85 @@ Requires PHP: 8.1
 Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
-Tags: block editor, gutenberg, logic, dynamic content, expressions
+Tags: block editor, gutenberg, dynamic content, personalization, conditional
 
 Embed dynamic expressions in the Gutenberg block editor to personalize content and control block visibility.
 
 == Description ==
 
-= How Expressions Work =
+= Features =
 
-Vector Expressions uses a **mustache-style template syntax** evaluated server-side on every block render.
+**Dynamic Content** — Insert live data into any block using a simple template syntax: `{{ post.title }}`, `{{ user.name }}`, `{{ site.name }}`. No shortcodes, no PHP templates, no code.
 
-= Syntax =
+**Personalization** — Greet visitors by name, show role-specific content, or display custom messages based on login status. Expressions are evaluated server-side on every page load.
 
-| Syntax               | Behaviour                                              |
-| :------------------- | :----------------------------------------------------- |
-| `{{ expression }}`   | Evaluate and HTML-escape the result                    |
-| `{{{ expression }}}` | Evaluate and sanitize via `wp_kses_post()` (safe HTML) |
-| `{{-- comment --}}`  | Strip the token entirely — no output                   |
+**Visibility Control** — Show or hide any Gutenberg block based on conditions. Display content only for logged-in users, specific roles, or specific post states — all configured from the block sidebar.
 
-= Data Roots =
+**Dynamic CSS Classes** — Inject CSS classes into any block based on live data. Style blocks differently for administrators vs. guests, published vs. draft posts, and more.
 
-Access WordPress data using dot-notation from these root variables:
+**20+ Built-in Filters** — Transform values with chainable pipes: `upper`, `lower`, `truncate`, `date`, `default`, `match`, `replace`, `kebab`, and more. Chain them: `{{ post.title | upper | truncate 20 }}`.
 
-| Root   | Resolves To                                          |
-| :----- | :--------------------------------------------------- |
-| `post` | Current `WP_Post`                                    |
-| `user` | Current `WP_User` (logged-in user)                   |
-| `site` | Object with `name`, `url`, `description`, `language` |
+**Custom Fields** — Access any post or user meta with `post.meta.my_field` or `user.meta.my_field`. Sensitive keys are blocked by default.
 
-= Property Aliases =
+**Full Expression Language** — Arithmetic, comparison, ternary, logical operators, string interpolation, and bracket access. All evaluated server-side with zero frontend JavaScript.
 
-You do not need to know WP internal property names. The engine maps common aliases automatically:
+**In-Editor Autocomplete** — Typing `{{` triggers smart autocomplete with categorized suggestions, icons, and live previews.
 
-**Post**
+**Extensible** — Register custom data roots, custom filters, and custom autocomplete suggestions via WordPress hooks and JavaScript filters.
 
-| Expression         | Description                                |
-| :----------------- | :----------------------------------------- |
-| `post.title`       | Post title                                 |
-| `post.content`     | Post content                               |
-| `post.excerpt`     | Post excerpt                               |
-| `post.slug`        | Post slug                                  |
-| `post.date`        | Publication date                           |
-| `post.status`      | Post status                                |
-| `post.type`        | Post type                                  |
-| `post.author`      | Author ID                                  |
-| `post.author_name` | Author display name (computed)             |
-| `post.id`          | Post ID                                    |
-| `post.url`         | Permalink (computed via `get_permalink()`) |
+For complete syntax reference, filter documentation, and developer guides, visit the [full documentation](https://vectorarrow.com/docs/).
 
-**User**
+= How It Works =
 
-| Expression          | Description                                |
-| :------------------ | :----------------------------------------- |
-| `user.name`         | Display name                               |
-| `user.email`        | Email (requires login — see note below)    |
-| `user.login`        | Username (requires login — see note below) |
-| `user.id`           | User ID                                    |
-| `user.url`          | Profile URL                                |
-| `user.registered`   | Registration date                          |
-| `user.roles`        | Role(s) array                              |
-| `user.is_logged_in` | `true` if logged in                        |
+Add an expression to any block's text content by typing `{{` and selecting your expression from the autocomplete menu. The plugin will automatically format it as an expression chip.
 
-> **Security:** `user.email` and `user.login` resolve **only** for logged-in visitors viewing their own data. Anonymous visitors receive an empty result. This prevents PII leakage while enabling personalization on user dashboards.
+    {{ post.title }}
+    {{ user.name | default "Guest" }}
+    {{ post.date | date "F j, Y" }}
+    {{ user.is_logged_in ? "Welcome back!" : "Hello, visitor!" }}
 
-**Meta**
+Expressions are rendered as interactive chips in the editor and resolved server-side on every page render. No JavaScript runs on the frontend.
 
-```handlebars
-{{post.meta.my_custom_field}}
-{{user.meta.my_user_meta_key}}
-```
-
-
-= Expression Language Reference =
-
-= Literals =
-
-```handlebars
-{{"Hello"}}
-{{-- string --}}
-{{42}}
-{{-- number --}}
-{{true}}
-{{-- boolean --}}
-{{null}}
-{{-- null --}}
-```
-
-= Operators =
-
-```handlebars
-{{ post.id + 1 }}
-{{ user.name == "admin" }}
-{{ post.status != "draft" }}
-{{ post.id > 10 && user.is_logged_in }}
-{{ post.id % 2 == 0 }}
-```
-
-= Ternary =
-
-```handlebars
-{{ user.name == "admin" ? "Admin" : "Guest" }}
-```
-
-= Property Access =
-
-```handlebars
-{{post.title}}
-{{post.meta.my_field}}
-{{site.name}}
-```
-
-= Dynamic Property Access =
-
-```handlebars
-{{ post["post_title"] }}
-```
-
-= Filters (Pipes) =
-
-Chain transformations with `|`:
-
-```handlebars
-{{ post.title | upper }}
-{{ post.title | lower }}
-{{ post.excerpt | default "No excerpt yet." }}
-{{ user.name | if then="Welcome back!" else="Hello, guest." }}
-{{ post.title | raw }}   {{-- bypass HTML escaping --}}
-```
-
-#### Built-in Filters
-
-**Case transforms**
-
-| Filter                       | Description                    | Example                          |
-| :--------------------------- | :----------------------------- | :------------------------------- |
-| `upper` / `uppercase`        | Uppercase all characters       | `{{ post.title \| upper }}`      |
-| `lower` / `lowercase`        | Lowercase all characters       | `{{ user.name \| lower }}`       |
-| `upper_first` / `capitalize` | Uppercase first character only | `{{ post.title \| capitalize }}` |
-
-**String utilities**
-
-| Filter                     | Description                     | Example                                           |
-| :------------------------- | :------------------------------ | :------------------------------------------------ |
-| `truncate length [suffix]` | Limit to N chars, append suffix | `{{ post.excerpt \| truncate 120 }}`              |
-| `trim [chars]`             | Strip whitespace or char set    | `{{ value \| trim }}` / `{{ value \| trim '/' }}` |
-| `replace search replace`   | Find-and-replace                | `{{ post.title \| replace 'Old' 'New' }}`         |
-| `kebab`                    | Slug via `sanitize_title()`     | `{{ post.title \| kebab }}`                       |
-
-**Date & format**
-
-| Filter          | Description          | Example                            |
-| :-------------- | :------------------- | :--------------------------------- |
-| `date [format]` | Format a date string | `{{ post.date \| date 'M j, Y' }}` |
-
-**Logic & flow**
-
-| Filter          | Description          | Example                                                   |
-| :-------------- | :------------------- | :-------------------------------------------------------- |
-| `default value` | Fallback when falsy  | `{{ post.excerpt \| default "None" }}`                    |
-| `if then else`  | Conditional output   | `{{ cond \| if then="Yes" else="No" }}`                   |
-| `match`         | Map a value to cases | `{{ post.status \| match draft="Draft" publish="Live" }}` |
-
-**Array utilities**
-
-| Filter      | Description               | Example                          |
-| :---------- | :------------------------ | :------------------------------- |
-| `map key`   | Pluck a key from an array | `{{ posts \| map key="title" }}` |
-| `join glue` | Join array to string      | `{{ tags \| join glue=", " }}`   |
-
-**WordPress data**
-
-| Filter                 | Description                               | Example                                                |
-| :--------------------- | :---------------------------------------- | :----------------------------------------------------- |
-| `get_post`             | Resolve ID → `WP_Post`                    | `{{ post.id \| get_post \| prop 'post_title' }}`       |
-| `get_user`             | Resolve ID → `WP_User`                    | `{{ post.author \| get_user \| prop 'display_name' }}` |
-| `get_meta key`         | Fetch post or user meta                   | `{{ post \| get_meta key="price" }}`                   |
-| `prop key` / `get key` | Access a property after a pipeline filter | `{{ post.id \| get_post \| prop 'post_title' }}`       |
-
-**Output & escaping**
-
-| Filter     | Description          | Example                  |
-| :--------- | :------------------- | :----------------------- |
-| `esc_html` | HTML-escape output   | `{{ text \| esc_html }}` |
-| `esc_attr` | Attr-escape output   | `{{ text \| esc_attr }}` |
-| `raw`      | Bypass HTML escaping | `{{ html \| raw }}`      |
-
-
-= Block Editor — Vector Logic Panel =
-
-Every block in the Gutenberg editor gains a **Vector Logic** panel in its inspector sidebar.
-
-= Visibility Logic =
-
-Control whether a block renders at all:
-
-* **Show if True** — block is visible when the expression is truthy
-* **Hide if True** — block is hidden when the expression is truthy
-
-```
-user.login == "admin"
-user.exists
-post.status == "publish"
-```
-
-= Dynamic Class =
-
-Append a CSS class to the block's root element based on an expression. Strings must be quoted:
-
-```
-user.login == "admin" ? "is-admin" : "is-guest"
-```
-
+For the full syntax guide, data roots, and filter reference, see the [documentation](https://vectorarrow.com/docs/).
 
 = Source Code =
 
-The full, uncompressed source code — including all JavaScript and CSS source files — is publicly available on GitHub:
-
-**[github.com/samuel-reinhardt/Vector-Expressions](https://github.com/samuel-reinhardt/Vector-Expressions)**
-
-The distributed `dist/` assets are built from source using Node.js and esbuild. To rebuild:
-
-```bash
-pnpm install
-pnpm build
-```
+The full, uncompressed source code is publicly available on [GitHub](https://github.com/samuel-reinhardt/Vector-Expressions).
 
 == Installation ==
 
 1. Upload the plugin files to the `/wp-content/plugins/vector-expressions` directory, or install the plugin through the WordPress plugins screen directly.
 2. Activate the plugin through the 'Plugins' screen in WordPress.
 3. Open the Block Editor and click the Vector ({{ braces) icon in the sidebar to access the Vector tab.
+
+== Frequently Asked Questions ==
+
+= Does this work with any block? =
+
+Yes. Expressions can be inserted into any block that uses Gutenberg's standard RichText component — including paragraphs, headings, buttons, lists, and third-party blocks. Editor previews resolve automatically for these blocks. Blocks that don't support previews are still processed and rendered on the frontend. A small number of code-oriented blocks (Code, Preformatted, HTML, Shortcode, Classic Editor) are excluded.
+
+= Is the content evaluated on the server or the client? =
+
+All expressions are evaluated **server-side** on every block render. There is no JavaScript on the frontend, so content is resolved before it reaches the visitor's browser.
+
+= Can I use custom post meta or user meta? =
+
+Yes. Use `post.meta.my_field` or `user.meta.my_field` to access any registered meta field. Sensitive meta keys (containing "password", "token", "secret", etc.) are blocked by default.
+
+= Is this compatible with caching plugins? =
+
+Expressions that depend on the current user (e.g., `user.name`, `user.is_logged_in`) require per-user or no-cache handling. Post-only expressions (e.g., `post.title`) are fully cache-safe.
+
+= Can I extend it with my own data or filters? =
+
+Yes. Use PHP filters to register custom data roots and custom filter functions. Use JavaScript filters to add autocomplete suggestions in the editor. See the [developer documentation](https://vectorarrow.com/docs/) for details.
+
+== Screenshots ==
+
+1. Expression editor with live previews — edit expressions in the sidebar and see resolved values in real time.
+2. Autocomplete menu — type `{{` to browse data roots and insert expressions without memorizing syntax.
+3. Suggestion browser — browse all available data roots, properties, and filters organized by category.
+4. Visibility and dynamic class controls — show or hide any block based on conditions and inject CSS classes powered by expressions.
 
 == Changelog ==
 
